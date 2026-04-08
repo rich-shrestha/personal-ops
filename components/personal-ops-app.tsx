@@ -25,6 +25,15 @@ interface PersistedState {
   ideas: IdeaCard[];
 }
 
+function applyAutoQueue(tasks: TaskCard[]): TaskCard[] {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  return tasks.map((task) =>
+    task.status === "triaged" && new Date(task.createdAt).getTime() <= cutoff
+      ? { ...task, status: "queued" as const, updatedAt: new Date().toISOString() }
+      : task,
+  );
+}
+
 function statusDotClass(status: TaskStatus) {
   if (status === "done") return "dot-done";
   if (status === "waiting-on-you") return "dot-warning";
@@ -170,7 +179,9 @@ export function PersonalOpsApp() {
   const [jobs, setJobs] = useState<AgentJob[]>([]);
   const [ideas, setIdeas] = useState<IdeaCard[]>([]);
   const [captureInput, setCaptureInput] = useState("");
-  const [voiceSupported, setVoiceSupported] = useState(false);
+  const voiceSupported =
+    typeof window !== "undefined" &&
+    ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
   const [voiceState, setVoiceState] = useState<"idle" | "recording">("idle");
   const [draft, setDraft] = useState<DraftTriage | null>(null);
   const [draftSourceId, setDraftSourceId] = useState<string | null>(null);
@@ -182,32 +193,41 @@ export function PersonalOpsApp() {
   const [apiProvider, setApiProvider] = useState<"heuristic" | "anthropic">("heuristic");
 
   useEffect(() => {
-    setVoiceSupported(
-      typeof window !== "undefined" &&
-        ("webkitSpeechRecognition" in window || "SpeechRecognition" in window),
-    );
-
+    let nextState: PersistedState;
     const saved = window.localStorage.getItem(storageKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as PersistedState;
-        setCaptures(parsed.captures);
-        setTasks(parsed.tasks);
-        setJobs(parsed.jobs);
-        setIdeas(parsed.ideas);
+        nextState = {
+          captures: parsed.captures,
+          tasks: applyAutoQueue(parsed.tasks),
+          jobs: parsed.jobs,
+          ideas: parsed.ideas,
+        };
       } catch {
-        setCaptures([]);
-        setTasks(initialTasks);
-        setJobs(initialJobs);
-        setIdeas(initialIdeas);
+        nextState = {
+          captures: [],
+          tasks: applyAutoQueue(initialTasks),
+          jobs: initialJobs,
+          ideas: initialIdeas,
+        };
       }
     } else {
-      setCaptures([]);
-      setTasks(initialTasks);
-      setJobs(initialJobs);
-      setIdeas(initialIdeas);
+      nextState = {
+        captures: [],
+        tasks: applyAutoQueue(initialTasks),
+        jobs: initialJobs,
+        ideas: initialIdeas,
+      };
     }
-    setBooted(true);
+
+    queueMicrotask(() => {
+      setCaptures(nextState.captures);
+      setTasks(nextState.tasks);
+      setJobs(nextState.jobs);
+      setIdeas(nextState.ideas);
+      setBooted(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -217,18 +237,6 @@ export function PersonalOpsApp() {
       JSON.stringify({ captures, tasks, jobs, ideas }),
     );
   }, [booted, captures, tasks, jobs, ideas]);
-
-  useEffect(() => {
-    if (!booted) return;
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    setTasks((current) =>
-      current.map((task) =>
-        task.status === "triaged" && new Date(task.createdAt).getTime() <= cutoff
-          ? { ...task, status: "queued", updatedAt: new Date().toISOString() }
-          : task,
-      ),
-    );
-  }, [booted]);
 
   // ─── Computed ─────────────────────────────────────────────────────────────
 

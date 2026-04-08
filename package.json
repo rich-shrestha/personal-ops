@@ -4,14 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx --ignore-pattern .next --ignore-pattern node_modules",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
-    "next": "15.2.4",
+    "next": "^16.2.2",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
@@ -20,7 +20,7 @@
     "@types/react": "19.0.12",
     "@types/react-dom": "19.0.4",
     "eslint": "9.24.0",
-    "eslint-config-next": "15.2.4",
+    "eslint-config-next": "^16.2.2",
     "globals": "^15.15.0",
     "json5": "^2.2.3",
     "typescript": "5.8.3"
