@@ -38,6 +38,7 @@ export interface TaskCard {
 export interface AgentJob {
   id: string;
   taskCardId: string;
+  provider: "heuristic" | "anthropic" | "openai";
   agent: "claude-api";
   status: JobStatus;
   followUpQuestions: string[];
@@ -64,10 +65,15 @@ export interface DraftTriage {
 
 export interface TriageResult {
   draft: DraftTriage;
-  provider: "heuristic" | "anthropic";
+  provider: "heuristic" | "anthropic" | "openai";
 }
 
 export interface AgentJobResult {
   job: AgentJob;
-  provider: "heuristic" | "anthropic";
+  provider: "heuristic" | "anthropic" | "openai";
+}
+
+export interface TranscriptionResult {
+  text: string;
+  provider: "browser" | "openai";
 }

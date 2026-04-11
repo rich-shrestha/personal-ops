@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { initialIdeas, initialJobs, initialTasks } from "@/lib/mock-data";
 import { buildDraft, startHeuristicJob, uid } from "@/lib/personal-ops";
 import {
@@ -23,6 +23,35 @@ interface PersistedState {
   tasks: TaskCard[];
   jobs: AgentJob[];
   ideas: IdeaCard[];
+}
+
+interface StateResponse extends PersistedState {
+  provider?: "supabase" | "memory";
+}
+
+function readLocalState(): PersistedState | null {
+  if (typeof window === "undefined") return null;
+
+  const saved = window.localStorage.getItem(storageKey);
+  if (!saved) return null;
+
+  try {
+    const parsed = JSON.parse(saved) as PersistedState;
+    return {
+      captures: parsed.captures ?? [],
+      tasks: applyAutoQueue(parsed.tasks ?? []),
+      jobs: (parsed.jobs ?? []).map((job) => ({
+        ...job,
+        provider:
+          job.provider === "anthropic" || job.provider === "openai"
+            ? job.provider
+            : "heuristic",
+      })),
+      ideas: parsed.ideas ?? [],
+    };
+  } catch {
+    return null;
+  }
 }
 
 function applyAutoQueue(tasks: TaskCard[]): TaskCard[] {
@@ -190,44 +219,58 @@ export function PersonalOpsApp() {
   const [triageBusy, setTriageBusy] = useState(false);
   const [jobBusyId, setJobBusyId] = useState<string | null>(null);
   const [followUpAnswer, setFollowUpAnswer] = useState("");
-  const [apiProvider, setApiProvider] = useState<"heuristic" | "anthropic">("heuristic");
+  const [apiProvider, setApiProvider] = useState<"heuristic" | "anthropic" | "openai">("heuristic");
+  const [storageProvider, setStorageProvider] = useState<"supabase" | "memory">("memory");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
-    let nextState: PersistedState;
-    const saved = window.localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as PersistedState;
-        nextState = {
-          captures: parsed.captures,
-          tasks: applyAutoQueue(parsed.tasks),
-          jobs: parsed.jobs,
-          ideas: parsed.ideas,
-        };
-      } catch {
-        nextState = {
+    void fetch("/api/state")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("State bootstrap failed");
+        const payload = (await response.json()) as StateResponse;
+        const localState = readLocalState();
+
+        if (payload.provider === "supabase") {
+          setCaptures(payload.captures);
+          setTasks(applyAutoQueue(payload.tasks));
+          setJobs(payload.jobs);
+          setIdeas(payload.ideas);
+          setStorageProvider("supabase");
+          return;
+        }
+
+        if (localState) {
+          setCaptures(localState.captures);
+          setTasks(localState.tasks);
+          setJobs(localState.jobs);
+          setIdeas(localState.ideas);
+        } else {
+          setCaptures(payload.captures);
+          setTasks(applyAutoQueue(payload.tasks));
+          setJobs(payload.jobs);
+          setIdeas(payload.ideas);
+        }
+
+        setStorageProvider("memory");
+      })
+      .catch(() => {
+        const nextState = readLocalState() ?? {
           captures: [],
           tasks: applyAutoQueue(initialTasks),
           jobs: initialJobs,
           ideas: initialIdeas,
         };
-      }
-    } else {
-      nextState = {
-        captures: [],
-        tasks: applyAutoQueue(initialTasks),
-        jobs: initialJobs,
-        ideas: initialIdeas,
-      };
-    }
 
-    queueMicrotask(() => {
-      setCaptures(nextState.captures);
-      setTasks(nextState.tasks);
-      setJobs(nextState.jobs);
-      setIdeas(nextState.ideas);
-      setBooted(true);
-    });
+        setCaptures(nextState.captures);
+        setTasks(nextState.tasks);
+        setJobs(nextState.jobs);
+        setIdeas(nextState.ideas);
+        setStorageProvider("memory");
+      })
+      .finally(() => {
+        setBooted(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -236,6 +279,22 @@ export function PersonalOpsApp() {
       storageKey,
       JSON.stringify({ captures, tasks, jobs, ideas }),
     );
+
+    startTransition(() => {
+      void fetch("/api/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ captures, tasks, jobs, ideas }),
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("State sync failed");
+          const payload = (await response.json()) as { provider?: "supabase" | "memory"; ok?: boolean };
+          if (payload.provider) setStorageProvider(payload.provider);
+        })
+        .catch(() => {
+          setStorageProvider("memory");
+        });
+    });
   }, [booted, captures, tasks, jobs, ideas]);
 
   // ─── Computed ─────────────────────────────────────────────────────────────
@@ -451,7 +510,29 @@ export function PersonalOpsApp() {
     setIdeas((current) => current.filter((item) => item.id !== idea.id));
   }
 
-  function startVoiceCapture() {
+  async function transcribeAudio(blob: Blob) {
+    const file = new File([blob], "voice.webm", { type: blob.type || "audio/webm" });
+    const formData = new FormData();
+    formData.append("audio", file);
+
+    const response = await fetch("/api/transcribe", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error("Transcription failed");
+    }
+
+    const payload = (await response.json()) as { text?: string; provider?: "openai" | "browser" };
+    if (payload.text) {
+      setCaptureInput(payload.text);
+      if (payload.provider === "openai") {
+        setApiProvider("openai");
+      }
+    }
+  }
+
+  function startBrowserSpeechCapture() {
     if (!voiceSupported) return;
     const SpeechRecognitionApi =
       (
@@ -480,6 +561,48 @@ export function PersonalOpsApp() {
     recognition.start();
   }
 
+  async function startVoiceCapture() {
+    if (voiceState === "recording" && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      return;
+    }
+
+    if (typeof window !== "undefined" && "MediaRecorder" in window && navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+        mediaRecorderRef.current = recorder;
+        setVoiceState("recording");
+
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+          audioChunksRef.current = [];
+          mediaRecorderRef.current = null;
+          stream.getTracks().forEach((track) => track.stop());
+          setVoiceState("idle");
+
+          void transcribeAudio(blob).catch(() => {
+            startBrowserSpeechCapture();
+          });
+        };
+
+        recorder.start();
+        return;
+      } catch {
+        // Fall through to browser speech API.
+      }
+    }
+
+    startBrowserSpeechCapture();
+  }
+
   function toggleTask(id: string) {
     setExpandedTaskId((current) => (current === id ? null : id));
   }
@@ -500,8 +623,15 @@ export function PersonalOpsApp() {
           placeholder="What's on your mind?"
         />
         <div className="capture-row">
-          <span className="capture-mode">{apiProvider === "anthropic" ? "AI triage on" : "Local mode"}</span>
-          {voiceSupported && (
+          <span className="capture-mode">
+            {storageProvider === "supabase" ? "Synced" : "Local"} ·{" "}
+            {apiProvider === "anthropic"
+              ? "Anthropic"
+              : apiProvider === "openai"
+                ? "OpenAI"
+                : "Heuristic"}
+          </span>
+          {(voiceSupported || (typeof window !== "undefined" && "MediaRecorder" in window)) && (
             <button
               className={`icon-button${voiceState === "recording" ? " recording" : ""}`}
               onClick={startVoiceCapture}

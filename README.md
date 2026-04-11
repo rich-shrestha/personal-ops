@@ -6,16 +6,19 @@ First-pass implementation of the approved design spec in [specs/personal-ops-des
 
 - Next.js App Router scaffold
 - Mobile-first capture and triage flow
-- Local task queue with confirm-to-start behavior
-- Server-backed triage and agent-job routes with graceful fallback
+- Simple `To Do / In Progress / Done` task flow with confirm-to-start behavior
+- Server-backed triage, transcription, and agent-job routes with graceful fallback
+- Anthropic-backed text triage and agent jobs
+- OpenAI-backed transcription route with browser-speech fallback in the client
+- Local-first persistence that prefers Supabase when the schema is available and otherwise keeps browser state intact
 - Ideas feed and SplitCheck shortcut
 - PWA manifest, service worker registration, and install icons
 
 ## Current Tradeoffs
 
-- Persistence is local storage, not Supabase yet
-- Anthropic is optional and only activates when `ANTHROPIC_API_KEY` is set
-- Supabase env scaffolding exists, but persistence is not wired yet
+- Text AI is provider-configurable and falls back gracefully if no key is set
+- Supabase schema and state sync are wired, but the remote schema still needs to be pushed to your new project
+- The current "agent" layer is real text reasoning, but not real external execution yet
 - No auth, credentials vault, notifications, or audit log yet
 
 ## Run
@@ -41,13 +44,44 @@ cp .env.example .env.local
 Available vars:
 
 - `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
+- `AI_TEXT_PROVIDER`
+- `AI_TRANSCRIPTION_PROVIDER`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
+## Provider Strategy
+
+- Keep the current UX.
+- Use Anthropic for text reasoning if you already have an Anthropic key.
+- Use OpenAI for Whisper transcription.
+- Use Supabase for cross-device persistence and workflow history.
+
+## Supabase Prep
+
+The initial SQL migration is in:
+
+`supabase/migrations/20260407210000_initial_personal_ops.sql`
+
+Once you create and link a new Supabase project, the next steps are:
+
+```bash
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+## Workflow Spec
+
+Concrete workflow levels and targets for this week are in:
+
+`specs/2026-04-07-automation-matrix.md`
+
 ## Next Build Steps
 
-1. Replace local storage with Supabase tables for captures, task cards, and agent jobs.
-2. Add real follow-up answer persistence and threaded job history.
-3. Add push/badge notifications and auto-queue timing rules.
-4. Add auth and scoped credential handling before any high-trust actions.
+1. Run `supabase login`, `supabase link --project-ref <your-project-ref>`, and `supabase db push`, or paste the migration into the Supabase SQL editor.
+2. Add the same Anthropic, OpenAI, and Supabase values to the Vercel project env vars.
+3. Deploy the current code so production uses the new backend routes.
+4. Add the first real external action surfaces after confirmation: email, calendar, reminders, or browser automation for high-trust flows.
+5. Add auth, audit logging, and tighter permissions before any autonomous high-trust execution.

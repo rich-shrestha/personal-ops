@@ -31,6 +31,7 @@ export const initialJobs: AgentJob[] = [
   {
     id: "job-1",
     taskCardId: "task-1",
+    provider: "heuristic",
     agent: "claude-api",
     status: "waiting-on-user",
     followUpQuestions: ["Should I prioritize cancellations or just flag subscriptions first?"],

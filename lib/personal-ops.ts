@@ -41,25 +41,42 @@ export function buildDraft(rawText: string): DraftTriage {
 
 export function startHeuristicJob(task: TaskCard): AgentJob {
   const now = new Date().toISOString();
+  const haystack = `${task.title} ${task.context}`.toLowerCase();
+  const isTax = haystack.includes("tax") || haystack.includes("freetaxusa");
+  const isRefinance =
+    haystack.includes("refinance") || haystack.includes("loan") || haystack.includes("apr");
+  const isDental = haystack.includes("dentist") || haystack.includes("dental");
+
+  const followUpQuestion = isTax
+    ? "Do you have any non-W-2 items like 1099 income, stock sales, or rental income?"
+    : isRefinance
+      ? "Do you want to optimize for lowest monthly payment, lowest total interest, or speed?"
+      : isDental
+        ? "Do you have dental insurance, and if so, which carrier or plan?"
+        : task.category === "finance"
+          ? "Do you want to optimize for speed, savings, or lowest effort?"
+          : "What outcome matters most so the agent can continue?";
+
+  const output = isTax
+    ? "Prep list drafted: gather W-2s/1099s, last year's AGI, SSNs, bank info for refund/payment, and any deduction records before opening FreeTaxUSA."
+    : isRefinance
+      ? "Refinance plan drafted: confirm current APR and payoff amount, pull recent pay stubs, insurance, registration, and compare 3 lenders on APR, term, fees, and monthly payment."
+      : isDental
+        ? "Quote workflow drafted: contact 3 offices, ask for cash and insurance-adjusted pricing, confirm exam/x-ray inclusion, and log wait times, availability, and financing options."
+        : task.category === "splitcheck"
+          ? "Drafted a payment reminder for your approval."
+          : task.complexity === "quick"
+            ? "Prepared a first-pass result for review."
+            : "Started. One follow-up is needed before continuing.";
+
   return {
     id: uid("job"),
     taskCardId: task.id,
+    provider: "heuristic",
     agent: "claude-api",
     status: task.complexity === "quick" ? "completed" : "waiting-on-user",
-    followUpQuestions:
-      task.complexity === "quick"
-        ? []
-        : [
-            task.category === "finance"
-              ? "Do you want to optimize for speed, savings, or lowest effort?"
-              : "What outcome matters most so the agent can continue?",
-          ],
-    output:
-      task.category === "splitcheck"
-        ? "Drafted a payment reminder for your approval."
-        : task.complexity === "quick"
-          ? "Prepared a first-pass result for review."
-          : "Started. One follow-up is needed before continuing.",
+    followUpQuestions: task.complexity === "quick" ? [] : [followUpQuestion],
+    output,
     startedAt: now,
     completedAt: task.complexity === "quick" ? now : undefined,
   };
