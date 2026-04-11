@@ -18,8 +18,11 @@ import {
   TaxWorkflowPayload,
 } from "@/lib/types";
 import {
+  advanceTaxSessionStep,
   buildFreeTaxUsaWorkflow,
   isTaxTask,
+  resetTaxSession,
+  startTaxFilingSession,
   toggleTaxChecklistItem,
   updateTaxWorkflowFields,
 } from "@/lib/workflows";
@@ -113,6 +116,9 @@ function TaskItem({
   onUpdate,
   onToggleWorkflowItem,
   onUpdateTaxWorkflow,
+  onStartTaxSession,
+  onAdvanceTaxSession,
+  onResetTaxSession,
 }: {
   task: TaskCard;
   job?: AgentJob;
@@ -132,6 +138,9 @@ function TaskItem({
       >
     >,
   ) => void;
+  onStartTaxSession: (workflowId: string) => void;
+  onAdvanceTaxSession: (workflowId: string) => void;
+  onResetTaxSession: (workflowId: string) => void;
 }) {
   const taxWorkflow =
     workflow?.workflowKey === "tax-freetaxusa"
@@ -350,6 +359,54 @@ function TaskItem({
                 {taxWorkflow.sessionReady
                   ? "Ready for supervised filing"
                   : "Still in prep mode"}
+              </div>
+              <div className="workflow-group">
+                <div className="workflow-mini-label">Filing session runner</div>
+                <div className="workflow-session-status">
+                  {taxWorkflow.sessionStatus === "idle"
+                    ? "Not started"
+                    : taxWorkflow.sessionStatus === "running"
+                      ? `Step ${Math.min(taxWorkflow.currentStepIndex + 1, taxWorkflow.sessionSteps.length)} of ${taxWorkflow.sessionSteps.length}`
+                      : "Session steps completed"}
+                </div>
+                <div className="workflow-group">
+                  {taxWorkflow.sessionSteps.map((step, index) => (
+                    <div
+                      className={`workflow-session-step${
+                        index === taxWorkflow.currentStepIndex && taxWorkflow.sessionStatus !== "complete"
+                          ? " current"
+                          : ""
+                      }${step.done ? " done" : ""}`}
+                      key={step.id}
+                    >
+                      <div className="workflow-check-label">{step.label}</div>
+                      {step.detail && <div className="workflow-check-detail">{step.detail}</div>}
+                    </div>
+                  ))}
+                </div>
+                <div className="action-buttons">
+                  <button
+                    className="button sm"
+                    disabled={!taxWorkflow.sessionReady || taxWorkflow.sessionStatus === "running"}
+                    onClick={() => workflow && onStartTaxSession(workflow.id)}
+                  >
+                    Start filing session
+                  </button>
+                  <button
+                    className="ghost-button sm"
+                    disabled={taxWorkflow.sessionStatus !== "running"}
+                    onClick={() => workflow && onAdvanceTaxSession(workflow.id)}
+                  >
+                    Complete current step
+                  </button>
+                  <button
+                    className="ghost-button sm"
+                    disabled={taxWorkflow.sessionStatus === "idle"}
+                    onClick={() => workflow && onResetTaxSession(workflow.id)}
+                  >
+                    Reset session
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -686,6 +743,36 @@ export function PersonalOpsApp() {
     );
   }
 
+  function startTaxSession(workflowId: string) {
+    setWorkflows((current) =>
+      current.map((workflow) =>
+        workflow.id === workflowId && workflow.workflowKey === "tax-freetaxusa"
+          ? startTaxFilingSession(workflow)
+          : workflow,
+      ),
+    );
+  }
+
+  function advanceTaxSession(workflowId: string) {
+    setWorkflows((current) =>
+      current.map((workflow) =>
+        workflow.id === workflowId && workflow.workflowKey === "tax-freetaxusa"
+          ? advanceTaxSessionStep(workflow)
+          : workflow,
+      ),
+    );
+  }
+
+  function resetTaxFilingSession(workflowId: string) {
+    setWorkflows((current) =>
+      current.map((workflow) =>
+        workflow.id === workflowId && workflow.workflowKey === "tax-freetaxusa"
+          ? resetTaxSession(workflow)
+          : workflow,
+      ),
+    );
+  }
+
   function answerFollowUp(jobId: string) {
     const relatedJob = jobs.find((j) => j.id === jobId);
     if (!relatedJob || !followUpAnswer.trim()) return;
@@ -1010,6 +1097,9 @@ export function PersonalOpsApp() {
                   onUpdate={(patch) => updateTask(task.id, patch)}
                   onToggleWorkflowItem={toggleWorkflowItem}
                   onUpdateTaxWorkflow={updateTaxWorkflow}
+                  onStartTaxSession={startTaxSession}
+                  onAdvanceTaxSession={advanceTaxSession}
+                  onResetTaxSession={resetTaxFilingSession}
                 />
               );
             })}
@@ -1041,6 +1131,9 @@ export function PersonalOpsApp() {
                   onUpdate={(patch) => updateTask(task.id, patch)}
                   onToggleWorkflowItem={toggleWorkflowItem}
                   onUpdateTaxWorkflow={updateTaxWorkflow}
+                  onStartTaxSession={startTaxSession}
+                  onAdvanceTaxSession={advanceTaxSession}
+                  onResetTaxSession={resetTaxFilingSession}
                 />
               );
             })}
@@ -1077,6 +1170,9 @@ export function PersonalOpsApp() {
                   onUpdate={(patch) => updateTask(task.id, patch)}
                   onToggleWorkflowItem={toggleWorkflowItem}
                   onUpdateTaxWorkflow={updateTaxWorkflow}
+                  onStartTaxSession={startTaxSession}
+                  onAdvanceTaxSession={advanceTaxSession}
+                  onResetTaxSession={resetTaxFilingSession}
                 />
               );
             })}

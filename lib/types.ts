@@ -102,6 +102,9 @@ export interface TaxWorkflowPayload {
   accountReady: boolean;
   sessionReady: boolean;
   sessionBrief: string[];
+  sessionStatus: "idle" | "running" | "complete";
+  currentStepIndex: number;
+  sessionSteps: ChecklistItem[];
 }
 
 export interface WorkflowRun {

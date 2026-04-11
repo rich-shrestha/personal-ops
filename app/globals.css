@@ -308,6 +308,29 @@ button { cursor: pointer; }
   color: var(--done);
 }
 
+.workflow-session-status {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.workflow-session-step {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 11px;
+  display: grid;
+  gap: 4px;
+}
+
+.workflow-session-step.current {
+  border-color: rgba(13, 108, 99, 0.28);
+  background: rgba(13, 108, 99, 0.05);
+}
+
+.workflow-session-step.done {
+  opacity: 0.6;
+}
+
 /* ─── Buttons ────────────────────────────────────────────────────────────── */
 
 .button {

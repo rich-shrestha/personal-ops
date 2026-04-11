@@ -1,4 +1,4 @@
-import { TaskCard, TaxWorkflowPayload, WorkflowRun } from "@/lib/types";
+import { ChecklistItem, TaskCard, TaxWorkflowPayload, WorkflowRun } from "@/lib/types";
 import { uid } from "@/lib/personal-ops";
 
 function containsTaxKeyword(text: string) {
@@ -32,6 +32,69 @@ function buildSessionBrief(payload: TaxWorkflowPayload) {
   }
 
   return lines;
+}
+
+function buildSessionSteps(payload: Pick<TaxWorkflowPayload, "hasMarketplaceInsurance" | "needsStateReturn">) {
+  const steps: ChecklistItem[] = [
+    {
+      id: uid("session"),
+      label: "Open FreeTaxUSA and start or resume the current year return",
+      detail: "Log in or create the account, then confirm you are in the correct tax year.",
+      done: false,
+    },
+    {
+      id: uid("session"),
+      label: "Enter identity and filing status details",
+      detail: "Walk through the personal information screens and choose the filing status you already set here.",
+      done: false,
+    },
+    {
+      id: uid("session"),
+      label: "Enter income documents",
+      detail: "Use the W-2 and 1099 documents you gathered. Pause if any expected form is still missing.",
+      done: false,
+    },
+    {
+      id: uid("session"),
+      label: "Review deductions, credits, and special situations",
+      detail: "Cover education, dependents, self-employment, investments, rental property, and other flagged topics.",
+      done: false,
+    },
+  ];
+
+  if (payload.hasMarketplaceInsurance) {
+    steps.push({
+      id: uid("session"),
+      label: "Enter Marketplace coverage details",
+      detail: "Use Form 1095-A and confirm the Premium Tax Credit reconciliation screens are complete.",
+      done: false,
+    });
+  }
+
+  steps.push({
+    id: uid("session"),
+    label: "Run federal review and prepare e-file signature",
+    detail: "Use prior-year AGI or prior-year e-file PIN when the final e-file signature screen appears.",
+    done: false,
+  });
+
+  if (payload.needsStateReturn) {
+    steps.push({
+      id: uid("session"),
+      label: "Complete the state return flow",
+      detail: "Move into the paid state return flow after federal review if a state filing is needed.",
+      done: false,
+    });
+  }
+
+  steps.push({
+    id: uid("session"),
+    label: "Final check before submission",
+    detail: "Confirm refund/payment details, optional add-ons, and only then decide whether to submit.",
+    done: false,
+  });
+
+  return steps;
 }
 
 export function buildFreeTaxUsaWorkflow(task: TaskCard): WorkflowRun {
@@ -96,6 +159,9 @@ export function buildFreeTaxUsaWorkflow(task: TaskCard): WorkflowRun {
     accountReady: false,
     sessionReady: false,
     sessionBrief: [],
+    sessionStatus: "idle",
+    currentStepIndex: 0,
+    sessionSteps: [],
   };
 
   const normalized = normalizeTaxWorkflowPayload(payload);
@@ -148,6 +214,12 @@ export function normalizeTaxWorkflowPayload(payload: TaxWorkflowPayload): TaxWor
     nextAction,
     sessionReady,
     sessionBrief: buildSessionBrief(payload),
+    sessionSteps:
+      payload.sessionStatus === "idle"
+        ? buildSessionSteps(payload)
+        : payload.sessionSteps.length > 0
+          ? payload.sessionSteps
+          : buildSessionSteps(payload),
   };
 }
 
@@ -182,6 +254,65 @@ export function updateTaxWorkflowFields(
   const nextPayload = normalizeTaxWorkflowPayload({
     ...payload,
     ...patch,
+  });
+
+  return {
+    ...workflow,
+    executionLevel: nextPayload.sessionReady ? "high-trust" : "prepare",
+    status: nextPayload.sessionReady ? "ready" : "active",
+    payload: nextPayload,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function startTaxFilingSession(workflow: WorkflowRun): WorkflowRun {
+  const payload = workflow.payload as TaxWorkflowPayload;
+  const nextPayload = normalizeTaxWorkflowPayload({
+    ...payload,
+    sessionStatus: "running",
+    currentStepIndex: 0,
+    sessionSteps: buildSessionSteps(payload),
+  });
+
+  return {
+    ...workflow,
+    executionLevel: "high-trust",
+    status: nextPayload.sessionReady ? "ready" : "blocked",
+    payload: nextPayload,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function advanceTaxSessionStep(workflow: WorkflowRun): WorkflowRun {
+  const payload = workflow.payload as TaxWorkflowPayload;
+  const sessionSteps = payload.sessionSteps.map((step, index) =>
+    index === payload.currentStepIndex ? { ...step, done: true } : step,
+  );
+  const nextIndex = Math.min(payload.currentStepIndex + 1, Math.max(sessionSteps.length - 1, 0));
+  const complete = sessionSteps.every((step) => step.done);
+  const nextPayload = normalizeTaxWorkflowPayload({
+    ...payload,
+    sessionStatus: complete ? "complete" : "running",
+    currentStepIndex: complete ? nextIndex : nextIndex,
+    sessionSteps,
+  });
+
+  return {
+    ...workflow,
+    executionLevel: "high-trust",
+    status: complete ? "done" : nextPayload.sessionReady ? "ready" : "blocked",
+    payload: nextPayload,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function resetTaxSession(workflow: WorkflowRun): WorkflowRun {
+  const payload = workflow.payload as TaxWorkflowPayload;
+  const nextPayload = normalizeTaxWorkflowPayload({
+    ...payload,
+    sessionStatus: "idle",
+    currentStepIndex: 0,
+    sessionSteps: buildSessionSteps(payload),
   });
 
   return {
