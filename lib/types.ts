@@ -95,6 +95,13 @@ export interface TaxWorkflowPayload {
   nextAction: string;
   checklist: ChecklistItem[];
   notes: string[];
+  filingStatus: "unknown" | "single" | "married-joint" | "married-separate" | "head-household";
+  needsStateReturn: boolean;
+  hasMarketplaceInsurance: boolean;
+  priorYearSignatureReady: boolean;
+  accountReady: boolean;
+  sessionReady: boolean;
+  sessionBrief: string[];
 }
 
 export interface WorkflowRun {

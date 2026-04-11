@@ -239,6 +239,28 @@ button { cursor: pointer; }
   gap: 8px;
 }
 
+.workflow-intake {
+  display: grid;
+  gap: 8px;
+}
+
+.workflow-field {
+  display: grid;
+  gap: 6px;
+}
+
+.workflow-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.workflow-toggle input {
+  margin: 0;
+}
+
 .workflow-mini-label {
   font-size: 0.75rem;
   color: var(--muted);
@@ -269,6 +291,21 @@ button { cursor: pointer; }
   font-size: 0.84rem;
   line-height: 1.4;
   margin-top: 2px;
+}
+
+.workflow-readiness {
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(192, 92, 26, 0.08);
+  color: var(--warning);
+  font-size: 0.85rem;
+  font-weight: 500;
+  justify-self: start;
+}
+
+.workflow-readiness.ready {
+  background: rgba(47, 125, 67, 0.1);
+  color: var(--done);
 }
 
 /* ─── Buttons ────────────────────────────────────────────────────────────── */

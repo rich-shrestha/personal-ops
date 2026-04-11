@@ -10,6 +10,30 @@ export function isTaxTask(task: Pick<TaskCard, "title" | "context">) {
   return containsTaxKeyword(`${task.title} ${task.context}`);
 }
 
+function buildSessionBrief(payload: TaxWorkflowPayload) {
+  const lines = [
+    "Open or log into FreeTaxUSA only after the checklist items below are ready.",
+    payload.priorYearSignatureReady
+      ? "Prior-year AGI or e-file PIN is ready for the e-file signature step."
+      : "Find prior-year AGI or e-file PIN before the final e-file step.",
+    payload.hasMarketplaceInsurance
+      ? "Expect to enter Form 1095-A details and reconcile Premium Tax Credit information."
+      : "No Marketplace insurance flagged so far.",
+    payload.needsStateReturn
+      ? "Plan for the paid state return flow after federal review."
+      : "You can likely stay federal-only unless a state filing becomes necessary.",
+    payload.accountReady
+      ? "FreeTaxUSA account access is ready."
+      : "Confirm account access or create an account before the filing session.",
+  ];
+
+  if (payload.filingStatus !== "unknown") {
+    lines.push(`Current filing status assumption: ${payload.filingStatus}.`);
+  }
+
+  return lines;
+}
+
 export function buildFreeTaxUsaWorkflow(task: TaskCard): WorkflowRun {
   const now = new Date().toISOString();
   const payload: TaxWorkflowPayload = {
@@ -56,25 +80,115 @@ export function buildFreeTaxUsaWorkflow(task: TaskCard): WorkflowRun {
       {
         id: uid("check"),
         label: "Decide federal plus state filing plan",
-        detail: "Federal return is free. State filing and Deluxe support may be separate decisions during checkout.",
+        detail: "Federal return is free. State filing is currently $15.99 and Deluxe support is optional.",
         done: false,
       },
     ],
     notes: [
       "FreeTaxUSA supports major situations including self-employment, investments, rental property, and education forms.",
-      "Do not submit until all expected forms are in hand and key identity details are verified.",
+      "Free federal filing is free. State return filing is currently $15.99 and Deluxe support is currently $7.99.",
       "This workflow prepares the filing session; actual website entry/submission is a later high-trust execution step.",
     ],
+    filingStatus: "unknown",
+    needsStateReturn: false,
+    hasMarketplaceInsurance: false,
+    priorYearSignatureReady: false,
+    accountReady: false,
+    sessionReady: false,
+    sessionBrief: [],
   };
+
+  const normalized = normalizeTaxWorkflowPayload(payload);
 
   return {
     id: uid("workflow"),
     taskCardId: task.id,
     workflowKey: "tax-freetaxusa",
-    executionLevel: "prepare",
-    status: "active",
-    payload,
+    executionLevel: normalized.sessionReady ? "high-trust" : "prepare",
+    status: normalized.sessionReady ? "ready" : "active",
+    payload: normalized,
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+export function normalizeTaxWorkflowPayload(payload: TaxWorkflowPayload): TaxWorkflowPayload {
+  const checklistComplete = payload.checklist.every((item) => item.done);
+  const blockers: string[] = [];
+
+  if (!checklistComplete) {
+    blockers.push("Finish the prep checklist before starting the filing session.");
+  }
+  if (!payload.priorYearSignatureReady) {
+    blockers.push("Find prior-year AGI or your prior-year e-file PIN for the e-file signature step.");
+  }
+  if (payload.hasMarketplaceInsurance) {
+    const hasHealthForm = payload.checklist.some(
+      (item) => item.label === "Check health coverage forms" && item.done,
+    );
+    if (!hasHealthForm) {
+      blockers.push("Gather Form 1095-A before going through the health insurance section.");
+    }
+  }
+  if (!payload.accountReady) {
+    blockers.push("Confirm you can log into FreeTaxUSA or create the account before the filing session.");
+  }
+  if (payload.filingStatus === "unknown") {
+    blockers.push("Choose the expected filing status before starting the filing interview.");
+  }
+
+  const sessionReady = blockers.length === 0;
+  const nextAction = sessionReady
+    ? "Ready for a supervised FreeTaxUSA filing session."
+    : blockers[0];
+
+  return {
+    ...payload,
+    blockers,
+    nextAction,
+    sessionReady,
+    sessionBrief: buildSessionBrief(payload),
+  };
+}
+
+export function toggleTaxChecklistItem(workflow: WorkflowRun, itemId: string): WorkflowRun {
+  const payload = workflow.payload as TaxWorkflowPayload;
+  const nextPayload = normalizeTaxWorkflowPayload({
+    ...payload,
+    checklist: payload.checklist.map((item) =>
+      item.id === itemId ? { ...item, done: !item.done } : item,
+    ),
+  });
+
+  return {
+    ...workflow,
+    executionLevel: nextPayload.sessionReady ? "high-trust" : "prepare",
+    status: nextPayload.sessionReady ? "ready" : "active",
+    payload: nextPayload,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function updateTaxWorkflowFields(
+  workflow: WorkflowRun,
+  patch: Partial<
+    Pick<
+      TaxWorkflowPayload,
+      "filingStatus" | "needsStateReturn" | "hasMarketplaceInsurance" | "priorYearSignatureReady" | "accountReady"
+    >
+  >,
+): WorkflowRun {
+  const payload = workflow.payload as TaxWorkflowPayload;
+  const nextPayload = normalizeTaxWorkflowPayload({
+    ...payload,
+    ...patch,
+  });
+
+  return {
+    ...workflow,
+    executionLevel: nextPayload.sessionReady ? "high-trust" : "prepare",
+    status: nextPayload.sessionReady ? "ready" : "active",
+    payload: nextPayload,
+    updatedAt: new Date().toISOString(),
   };
 }

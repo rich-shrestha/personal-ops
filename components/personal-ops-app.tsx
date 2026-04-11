@@ -17,7 +17,12 @@ import {
   WorkflowRun,
   TaxWorkflowPayload,
 } from "@/lib/types";
-import { buildFreeTaxUsaWorkflow, isTaxTask } from "@/lib/workflows";
+import {
+  buildFreeTaxUsaWorkflow,
+  isTaxTask,
+  toggleTaxChecklistItem,
+  updateTaxWorkflowFields,
+} from "@/lib/workflows";
 
 const storageKey = "personal-ops-state-v1";
 
@@ -107,6 +112,7 @@ function TaskItem({
   onDone,
   onUpdate,
   onToggleWorkflowItem,
+  onUpdateTaxWorkflow,
 }: {
   task: TaskCard;
   job?: AgentJob;
@@ -117,6 +123,15 @@ function TaskItem({
   onDone: () => void;
   onUpdate: (patch: Partial<TaskCard>) => void;
   onToggleWorkflowItem: (workflowId: string, itemId: string) => void;
+  onUpdateTaxWorkflow: (
+    workflowId: string,
+    patch: Partial<
+      Pick<
+        TaxWorkflowPayload,
+        "filingStatus" | "needsStateReturn" | "hasMarketplaceInsurance" | "priorYearSignatureReady" | "accountReady"
+      >
+    >,
+  ) => void;
 }) {
   const taxWorkflow =
     workflow?.workflowKey === "tax-freetaxusa"
@@ -219,6 +234,79 @@ function TaskItem({
               <div className="workflow-next">
                 <strong>Next:</strong> {taxWorkflow.nextAction}
               </div>
+              <div className="workflow-intake">
+                <label className="workflow-field">
+                  <span className="workflow-mini-label">Filing status</span>
+                  <select
+                    className="field-input"
+                    value={taxWorkflow.filingStatus}
+                    onChange={(e) =>
+                      workflow &&
+                      onUpdateTaxWorkflow(workflow.id, {
+                        filingStatus: e.target.value as TaxWorkflowPayload["filingStatus"],
+                      })
+                    }
+                  >
+                    <option value="unknown">Choose later</option>
+                    <option value="single">Single</option>
+                    <option value="married-joint">Married filing jointly</option>
+                    <option value="married-separate">Married filing separately</option>
+                    <option value="head-household">Head of household</option>
+                  </select>
+                </label>
+                <label className="workflow-toggle">
+                  <input
+                    type="checkbox"
+                    checked={taxWorkflow.needsStateReturn}
+                    onChange={() =>
+                      workflow &&
+                      onUpdateTaxWorkflow(workflow.id, {
+                        needsStateReturn: !taxWorkflow.needsStateReturn,
+                      })
+                    }
+                  />
+                  <span>Need state return</span>
+                </label>
+                <label className="workflow-toggle">
+                  <input
+                    type="checkbox"
+                    checked={taxWorkflow.hasMarketplaceInsurance}
+                    onChange={() =>
+                      workflow &&
+                      onUpdateTaxWorkflow(workflow.id, {
+                        hasMarketplaceInsurance: !taxWorkflow.hasMarketplaceInsurance,
+                      })
+                    }
+                  />
+                  <span>Had Marketplace insurance</span>
+                </label>
+                <label className="workflow-toggle">
+                  <input
+                    type="checkbox"
+                    checked={taxWorkflow.priorYearSignatureReady}
+                    onChange={() =>
+                      workflow &&
+                      onUpdateTaxWorkflow(workflow.id, {
+                        priorYearSignatureReady: !taxWorkflow.priorYearSignatureReady,
+                      })
+                    }
+                  />
+                  <span>AGI or prior-year PIN ready</span>
+                </label>
+                <label className="workflow-toggle">
+                  <input
+                    type="checkbox"
+                    checked={taxWorkflow.accountReady}
+                    onChange={() =>
+                      workflow &&
+                      onUpdateTaxWorkflow(workflow.id, {
+                        accountReady: !taxWorkflow.accountReady,
+                      })
+                    }
+                  />
+                  <span>FreeTaxUSA account ready</span>
+                </label>
+              </div>
               <div className="workflow-group">
                 {taxWorkflow.checklist.map((item) => (
                   <label className="workflow-check" key={item.id}>
@@ -250,6 +338,19 @@ function TaskItem({
                   ))}
                 </div>
               )}
+              {taxWorkflow.sessionBrief.length > 0 && (
+                <div className="workflow-group">
+                  <div className="workflow-mini-label">Session brief</div>
+                  {taxWorkflow.sessionBrief.map((line) => (
+                    <p className="workflow-note" key={line}>{line}</p>
+                  ))}
+                </div>
+              )}
+              <div className={`workflow-readiness${taxWorkflow.sessionReady ? " ready" : ""}`}>
+                {taxWorkflow.sessionReady
+                  ? "Ready for supervised filing"
+                  : "Still in prep mode"}
+              </div>
             </div>
           )}
 
@@ -562,28 +663,25 @@ export function PersonalOpsApp() {
   function toggleWorkflowItem(workflowId: string, itemId: string) {
     setWorkflows((current) =>
       current.map((workflow) => {
-        if (workflow.id !== workflowId || workflow.workflowKey !== "tax-freetaxusa") {
-          return workflow;
-        }
+        if (workflow.id !== workflowId || workflow.workflowKey !== "tax-freetaxusa") return workflow;
+        return toggleTaxChecklistItem(workflow, itemId);
+      }),
+    );
+  }
 
-        const payload = workflow.payload as TaxWorkflowPayload;
-        const checklist = payload.checklist.map((item) =>
-          item.id === itemId ? { ...item, done: !item.done } : item,
-        );
-        const allDone = checklist.every((item) => item.done);
-
-        return {
-          ...workflow,
-          status: allDone ? "ready" : "active",
-          payload: {
-            ...payload,
-            checklist,
-            nextAction: allDone
-              ? "Ready for a supervised FreeTaxUSA filing session."
-              : payload.nextAction,
-          },
-          updatedAt: new Date().toISOString(),
-        };
+  function updateTaxWorkflow(
+    workflowId: string,
+    patch: Partial<
+      Pick<
+        TaxWorkflowPayload,
+        "filingStatus" | "needsStateReturn" | "hasMarketplaceInsurance" | "priorYearSignatureReady" | "accountReady"
+      >
+    >,
+  ) {
+    setWorkflows((current) =>
+      current.map((workflow) => {
+        if (workflow.id !== workflowId || workflow.workflowKey !== "tax-freetaxusa") return workflow;
+        return updateTaxWorkflowFields(workflow, patch);
       }),
     );
   }
@@ -911,6 +1009,7 @@ export function PersonalOpsApp() {
                   onDone={() => completeTask(task.id)}
                   onUpdate={(patch) => updateTask(task.id, patch)}
                   onToggleWorkflowItem={toggleWorkflowItem}
+                  onUpdateTaxWorkflow={updateTaxWorkflow}
                 />
               );
             })}
@@ -941,6 +1040,7 @@ export function PersonalOpsApp() {
                   onDone={() => completeTask(task.id)}
                   onUpdate={(patch) => updateTask(task.id, patch)}
                   onToggleWorkflowItem={toggleWorkflowItem}
+                  onUpdateTaxWorkflow={updateTaxWorkflow}
                 />
               );
             })}
@@ -976,6 +1076,7 @@ export function PersonalOpsApp() {
                   onDone={() => completeTask(task.id)}
                   onUpdate={(patch) => updateTask(task.id, patch)}
                   onToggleWorkflowItem={toggleWorkflowItem}
+                  onUpdateTaxWorkflow={updateTaxWorkflow}
                 />
               );
             })}
