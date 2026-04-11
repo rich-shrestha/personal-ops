@@ -21,7 +21,9 @@ import {
   advanceTaxSessionStep,
   buildFreeTaxUsaWorkflow,
   isTaxTask,
+  prepareTaxBrowserHandoff,
   resetTaxSession,
+  requestTaxBrowserExecution,
   startTaxFilingSession,
   toggleTaxChecklistItem,
   updateTaxWorkflowFields,
@@ -119,6 +121,8 @@ function TaskItem({
   onStartTaxSession,
   onAdvanceTaxSession,
   onResetTaxSession,
+  onPrepareBrowserHandoff,
+  onRequestBrowserExecution,
 }: {
   task: TaskCard;
   job?: AgentJob;
@@ -141,6 +145,8 @@ function TaskItem({
   onStartTaxSession: (workflowId: string) => void;
   onAdvanceTaxSession: (workflowId: string) => void;
   onResetTaxSession: (workflowId: string) => void;
+  onPrepareBrowserHandoff: (task: TaskCard, workflowId: string) => void;
+  onRequestBrowserExecution: (workflowId: string) => void;
 }) {
   const taxWorkflow =
     workflow?.workflowKey === "tax-freetaxusa"
@@ -405,6 +411,46 @@ function TaskItem({
                     onClick={() => workflow && onResetTaxSession(workflow.id)}
                   >
                     Reset session
+                  </button>
+                </div>
+              </div>
+              <div className="workflow-group">
+                <div className="workflow-mini-label">Browser automation handoff</div>
+                <div className="workflow-session-status">
+                  {taxWorkflow.browserHandoffStatus === "idle"
+                    ? "Not prepared"
+                    : taxWorkflow.browserHandoffStatus === "prepared"
+                      ? "Prepared for a future browser worker"
+                      : "Execution requested"}
+                </div>
+                {taxWorkflow.browserHandoffPlan.length > 0 && (
+                  <div className="workflow-group">
+                    {taxWorkflow.browserHandoffPlan.map((step) => (
+                      <p className="workflow-note" key={step}>{step}</p>
+                    ))}
+                  </div>
+                )}
+                {taxWorkflow.browserHandoffWarnings.length > 0 && (
+                  <div className="workflow-group">
+                    {taxWorkflow.browserHandoffWarnings.map((warning) => (
+                      <p className="workflow-note" key={warning}>{warning}</p>
+                    ))}
+                  </div>
+                )}
+                <div className="action-buttons">
+                  <button
+                    className="button sm"
+                    disabled={!taxWorkflow.sessionReady}
+                    onClick={() => workflow && onPrepareBrowserHandoff(task, workflow.id)}
+                  >
+                    Prepare browser handoff
+                  </button>
+                  <button
+                    className="ghost-button sm"
+                    disabled={taxWorkflow.browserHandoffStatus !== "prepared"}
+                    onClick={() => workflow && onRequestBrowserExecution(workflow.id)}
+                  >
+                    Request execution
                   </button>
                 </div>
               </div>
@@ -773,6 +819,38 @@ export function PersonalOpsApp() {
     );
   }
 
+  function prepareBrowserHandoff(task: TaskCard, workflowId: string) {
+    setWorkflows((current) =>
+      current.map((workflow) => {
+        if (workflow.id !== workflowId || workflow.workflowKey !== "tax-freetaxusa") return workflow;
+        return prepareTaxBrowserHandoff(workflow);
+      }),
+    );
+
+    const workflow = workflows.find((item) => item.id === workflowId);
+    if (!workflow) return;
+
+    startTransition(() => {
+      void fetch("/api/browser-handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task, workflow }),
+      }).catch(() => {
+        // The UI already stores a local prepared handoff state even if this request fails.
+      });
+    });
+  }
+
+  function requestBrowserExecution(workflowId: string) {
+    setWorkflows((current) =>
+      current.map((workflow) =>
+        workflow.id === workflowId && workflow.workflowKey === "tax-freetaxusa"
+          ? requestTaxBrowserExecution(workflow)
+          : workflow,
+      ),
+    );
+  }
+
   function answerFollowUp(jobId: string) {
     const relatedJob = jobs.find((j) => j.id === jobId);
     if (!relatedJob || !followUpAnswer.trim()) return;
@@ -1100,6 +1178,8 @@ export function PersonalOpsApp() {
                   onStartTaxSession={startTaxSession}
                   onAdvanceTaxSession={advanceTaxSession}
                   onResetTaxSession={resetTaxFilingSession}
+                  onPrepareBrowserHandoff={prepareBrowserHandoff}
+                  onRequestBrowserExecution={requestBrowserExecution}
                 />
               );
             })}
@@ -1134,6 +1214,8 @@ export function PersonalOpsApp() {
                   onStartTaxSession={startTaxSession}
                   onAdvanceTaxSession={advanceTaxSession}
                   onResetTaxSession={resetTaxFilingSession}
+                  onPrepareBrowserHandoff={prepareBrowserHandoff}
+                  onRequestBrowserExecution={requestBrowserExecution}
                 />
               );
             })}
@@ -1173,6 +1255,8 @@ export function PersonalOpsApp() {
                   onStartTaxSession={startTaxSession}
                   onAdvanceTaxSession={advanceTaxSession}
                   onResetTaxSession={resetTaxFilingSession}
+                  onPrepareBrowserHandoff={prepareBrowserHandoff}
+                  onRequestBrowserExecution={requestBrowserExecution}
                 />
               );
             })}

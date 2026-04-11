@@ -105,6 +105,10 @@ export interface TaxWorkflowPayload {
   sessionStatus: "idle" | "running" | "complete";
   currentStepIndex: number;
   sessionSteps: ChecklistItem[];
+  browserHandoffStatus: "idle" | "prepared" | "requested";
+  browserHandoffPlan: string[];
+  browserHandoffWarnings: string[];
+  browserHandoffPreparedAt?: string;
 }
 
 export interface WorkflowRun {

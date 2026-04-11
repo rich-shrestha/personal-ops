@@ -97,6 +97,44 @@ function buildSessionSteps(payload: Pick<TaxWorkflowPayload, "hasMarketplaceInsu
   return steps;
 }
 
+function buildBrowserHandoffPlan(payload: TaxWorkflowPayload) {
+  const steps = [
+    "Open FreeTaxUSA and authenticate into the correct tax-year return.",
+    `Set filing status to ${payload.filingStatus === "unknown" ? "the confirmed filing status" : payload.filingStatus}.`,
+    "Enter personal identity details, dependents, and bank/refund information from the prepared checklist.",
+    "Enter all gathered W-2 and 1099 documents exactly as shown.",
+    "Review deductions, credits, and any special situations called out in the checklist.",
+  ];
+
+  if (payload.hasMarketplaceInsurance) {
+    steps.push("Enter Form 1095-A details and complete the Premium Tax Credit reconciliation screens.");
+  }
+
+  steps.push("Run the federal review flow and use prior-year AGI or prior-year e-file PIN when prompted.");
+
+  if (payload.needsStateReturn) {
+    steps.push("Continue into the state return flow and confirm the paid state filing decision.");
+  }
+
+  steps.push("Stop before final submission and ask for explicit approval before clicking any final send/submit button.");
+  return steps;
+}
+
+function buildBrowserHandoffWarnings(payload: TaxWorkflowPayload) {
+  const warnings = [
+    "Do not submit the return automatically without explicit final confirmation.",
+    "Pause if any expected tax document is missing or inconsistent.",
+  ];
+
+  if (!payload.priorYearSignatureReady) {
+    warnings.push("Prior-year AGI or e-file PIN is still missing.");
+  }
+  if (payload.hasMarketplaceInsurance) {
+    warnings.push("Marketplace insurance requires careful 1095-A / Form 8962 handling.");
+  }
+  return warnings;
+}
+
 export function buildFreeTaxUsaWorkflow(task: TaskCard): WorkflowRun {
   const now = new Date().toISOString();
   const payload: TaxWorkflowPayload = {
@@ -162,6 +200,9 @@ export function buildFreeTaxUsaWorkflow(task: TaskCard): WorkflowRun {
     sessionStatus: "idle",
     currentStepIndex: 0,
     sessionSteps: [],
+    browserHandoffStatus: "idle",
+    browserHandoffPlan: [],
+    browserHandoffWarnings: [],
   };
 
   const normalized = normalizeTaxWorkflowPayload(payload);
@@ -320,6 +361,40 @@ export function resetTaxSession(workflow: WorkflowRun): WorkflowRun {
     executionLevel: nextPayload.sessionReady ? "high-trust" : "prepare",
     status: nextPayload.sessionReady ? "ready" : "active",
     payload: nextPayload,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function prepareTaxBrowserHandoff(workflow: WorkflowRun): WorkflowRun {
+  const payload = workflow.payload as TaxWorkflowPayload;
+  const normalized = normalizeTaxWorkflowPayload(payload);
+  const nextPayload: TaxWorkflowPayload = {
+    ...normalized,
+    browserHandoffStatus: "prepared",
+    browserHandoffPlan: buildBrowserHandoffPlan(normalized),
+    browserHandoffWarnings: buildBrowserHandoffWarnings(normalized),
+    browserHandoffPreparedAt: new Date().toISOString(),
+  };
+
+  return {
+    ...workflow,
+    executionLevel: "high-trust",
+    status: nextPayload.sessionReady ? workflow.status : "blocked",
+    payload: nextPayload,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function requestTaxBrowserExecution(workflow: WorkflowRun): WorkflowRun {
+  const payload = workflow.payload as TaxWorkflowPayload;
+  return {
+    ...workflow,
+    executionLevel: "high-trust",
+    status: payload.sessionReady ? "ready" : "blocked",
+    payload: {
+      ...payload,
+      browserHandoffStatus: "requested",
+    },
     updatedAt: new Date().toISOString(),
   };
 }
