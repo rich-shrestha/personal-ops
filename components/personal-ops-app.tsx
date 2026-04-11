@@ -14,7 +14,10 @@ import {
   TaskComplexity,
   TaskStatus,
   TriageResult,
+  WorkflowRun,
+  TaxWorkflowPayload,
 } from "@/lib/types";
+import { buildFreeTaxUsaWorkflow, isTaxTask } from "@/lib/workflows";
 
 const storageKey = "personal-ops-state-v1";
 
@@ -23,6 +26,7 @@ interface PersistedState {
   tasks: TaskCard[];
   jobs: AgentJob[];
   ideas: IdeaCard[];
+  workflows: WorkflowRun[];
 }
 
 interface StateResponse extends PersistedState {
@@ -48,10 +52,31 @@ function readLocalState(): PersistedState | null {
             : "heuristic",
       })),
       ideas: parsed.ideas ?? [],
+      workflows: parsed.workflows ?? [],
     };
   } catch {
     return null;
   }
+}
+
+function withAutoWorkflows(state: PersistedState): PersistedState {
+  const existingTaxTaskIds = new Set(
+    state.workflows
+      .filter((workflow) => workflow.workflowKey === "tax-freetaxusa")
+      .map((workflow) => workflow.taskCardId),
+  );
+
+  const additions = state.tasks
+    .filter((task) => isTaxTask(task))
+    .filter((task) => !existingTaxTaskIds.has(task.id))
+    .map((task) => buildFreeTaxUsaWorkflow(task));
+
+  if (additions.length === 0) return state;
+
+  return {
+    ...state,
+    workflows: [...additions, ...state.workflows],
+  };
 }
 
 function applyAutoQueue(tasks: TaskCard[]): TaskCard[] {
@@ -75,20 +100,29 @@ function statusDotClass(status: TaskStatus) {
 function TaskItem({
   task,
   job,
+  workflow,
   isExpanded,
   onToggle,
   onStart,
   onDone,
   onUpdate,
+  onToggleWorkflowItem,
 }: {
   task: TaskCard;
   job?: AgentJob;
+  workflow?: WorkflowRun;
   isExpanded: boolean;
   onToggle: () => void;
   onStart: () => void;
   onDone: () => void;
   onUpdate: (patch: Partial<TaskCard>) => void;
+  onToggleWorkflowItem: (workflowId: string, itemId: string) => void;
 }) {
+  const taxWorkflow =
+    workflow?.workflowKey === "tax-freetaxusa"
+      ? (workflow.payload as TaxWorkflowPayload)
+      : null;
+
   return (
     <article
       className={[
@@ -178,6 +212,47 @@ function TaskItem({
             </div>
           )}
 
+          {taxWorkflow && (
+            <div className="workflow-panel">
+              <div className="field-label">FreeTaxUSA execution plan</div>
+              <p className="workflow-summary">{taxWorkflow.summary}</p>
+              <div className="workflow-next">
+                <strong>Next:</strong> {taxWorkflow.nextAction}
+              </div>
+              <div className="workflow-group">
+                {taxWorkflow.checklist.map((item) => (
+                  <label className="workflow-check" key={item.id}>
+                    <input
+                      type="checkbox"
+                      checked={item.done}
+                      onChange={() => workflow && onToggleWorkflowItem(workflow.id, item.id)}
+                    />
+                    <span>
+                      <span className="workflow-check-label">{item.label}</span>
+                      {item.detail && <span className="workflow-check-detail">{item.detail}</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {taxWorkflow.blockers.length > 0 && (
+                <div className="workflow-group">
+                  <div className="workflow-mini-label">Blockers</div>
+                  {taxWorkflow.blockers.map((blocker) => (
+                    <p className="workflow-note" key={blocker}>{blocker}</p>
+                  ))}
+                </div>
+              )}
+              {taxWorkflow.notes.length > 0 && (
+                <div className="workflow-group">
+                  <div className="workflow-mini-label">FreeTaxUSA notes</div>
+                  {taxWorkflow.notes.map((note) => (
+                    <p className="workflow-note" key={note}>{note}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="task-actions">
             {task.status !== "in-progress" && task.status !== "done" && (
               <button className="button sm" onClick={onStart}>
@@ -207,6 +282,7 @@ export function PersonalOpsApp() {
   const [tasks, setTasks] = useState<TaskCard[]>([]);
   const [jobs, setJobs] = useState<AgentJob[]>([]);
   const [ideas, setIdeas] = useState<IdeaCard[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowRun[]>([]);
   const [captureInput, setCaptureInput] = useState("");
   const voiceSupported =
     typeof window !== "undefined" &&
@@ -232,40 +308,60 @@ export function PersonalOpsApp() {
         const localState = readLocalState();
 
         if (payload.provider === "supabase") {
-          setCaptures(payload.captures);
-          setTasks(applyAutoQueue(payload.tasks));
-          setJobs(payload.jobs);
-          setIdeas(payload.ideas);
+          const nextState = withAutoWorkflows({
+            captures: payload.captures,
+            tasks: applyAutoQueue(payload.tasks),
+            jobs: payload.jobs,
+            ideas: payload.ideas,
+            workflows: payload.workflows ?? [],
+          });
+          setCaptures(nextState.captures);
+          setTasks(nextState.tasks);
+          setJobs(nextState.jobs);
+          setIdeas(nextState.ideas);
+          setWorkflows(nextState.workflows);
           setStorageProvider("supabase");
           return;
         }
 
         if (localState) {
-          setCaptures(localState.captures);
-          setTasks(localState.tasks);
-          setJobs(localState.jobs);
-          setIdeas(localState.ideas);
+          const nextState = withAutoWorkflows(localState);
+          setCaptures(nextState.captures);
+          setTasks(nextState.tasks);
+          setJobs(nextState.jobs);
+          setIdeas(nextState.ideas);
+          setWorkflows(nextState.workflows);
         } else {
-          setCaptures(payload.captures);
-          setTasks(applyAutoQueue(payload.tasks));
-          setJobs(payload.jobs);
-          setIdeas(payload.ideas);
+          const nextState = withAutoWorkflows({
+            captures: payload.captures,
+            tasks: applyAutoQueue(payload.tasks),
+            jobs: payload.jobs,
+            ideas: payload.ideas,
+            workflows: payload.workflows ?? [],
+          });
+          setCaptures(nextState.captures);
+          setTasks(nextState.tasks);
+          setJobs(nextState.jobs);
+          setIdeas(nextState.ideas);
+          setWorkflows(nextState.workflows);
         }
 
         setStorageProvider("memory");
       })
       .catch(() => {
-        const nextState = readLocalState() ?? {
+        const nextState = withAutoWorkflows(readLocalState() ?? {
           captures: [],
           tasks: applyAutoQueue(initialTasks),
           jobs: initialJobs,
           ideas: initialIdeas,
-        };
+          workflows: [],
+        });
 
         setCaptures(nextState.captures);
         setTasks(nextState.tasks);
         setJobs(nextState.jobs);
         setIdeas(nextState.ideas);
+        setWorkflows(nextState.workflows);
         setStorageProvider("memory");
       })
       .finally(() => {
@@ -277,14 +373,14 @@ export function PersonalOpsApp() {
     if (!booted) return;
     window.localStorage.setItem(
       storageKey,
-      JSON.stringify({ captures, tasks, jobs, ideas }),
+      JSON.stringify({ captures, tasks, jobs, ideas, workflows }),
     );
 
     startTransition(() => {
       void fetch("/api/state", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ captures, tasks, jobs, ideas }),
+        body: JSON.stringify({ captures, tasks, jobs, ideas, workflows }),
       })
         .then(async (response) => {
           if (!response.ok) throw new Error("State sync failed");
@@ -295,7 +391,7 @@ export function PersonalOpsApp() {
           setStorageProvider("memory");
         });
     });
-  }, [booted, captures, tasks, jobs, ideas]);
+  }, [booted, captures, tasks, jobs, ideas, workflows]);
 
   // ─── Computed ─────────────────────────────────────────────────────────────
 
@@ -393,8 +489,21 @@ export function PersonalOpsApp() {
       updatedAt: now,
     };
     setTasks((t) => [task, ...t]);
+    if (isTaxTask(task)) {
+      setWorkflows((current) => [buildFreeTaxUsaWorkflow(task), ...current]);
+    }
     setDraft(null);
     setDraftSourceId(null);
+  }
+
+  function ensureWorkflow(task: TaskCard) {
+    if (!isTaxTask(task)) return;
+    setWorkflows((current) => {
+      if (current.some((workflow) => workflow.taskCardId === task.id && workflow.workflowKey === "tax-freetaxusa")) {
+        return current;
+      }
+      return [buildFreeTaxUsaWorkflow(task), ...current];
+    });
   }
 
   function updateTask(taskId: string, patch: Partial<TaskCard>) {
@@ -410,6 +519,7 @@ export function PersonalOpsApp() {
   function confirmAndStart(task: TaskCard) {
     setExpandedTaskId(task.id); // always show the card so output is visible
     setJobBusyId(task.id);
+    ensureWorkflow(task);
 
     startTransition(() => {
       void fetch("/api/agent-jobs", {
@@ -440,6 +550,42 @@ export function PersonalOpsApp() {
 
   function completeTask(taskId: string) {
     updateTask(taskId, { status: "done" });
+    setWorkflows((current) =>
+      current.map((workflow) =>
+        workflow.taskCardId === taskId
+          ? { ...workflow, status: "done", updatedAt: new Date().toISOString() }
+          : workflow,
+      ),
+    );
+  }
+
+  function toggleWorkflowItem(workflowId: string, itemId: string) {
+    setWorkflows((current) =>
+      current.map((workflow) => {
+        if (workflow.id !== workflowId || workflow.workflowKey !== "tax-freetaxusa") {
+          return workflow;
+        }
+
+        const payload = workflow.payload as TaxWorkflowPayload;
+        const checklist = payload.checklist.map((item) =>
+          item.id === itemId ? { ...item, done: !item.done } : item,
+        );
+        const allDone = checklist.every((item) => item.done);
+
+        return {
+          ...workflow,
+          status: allDone ? "ready" : "active",
+          payload: {
+            ...payload,
+            checklist,
+            nextAction: allDone
+              ? "Ready for a supervised FreeTaxUSA filing session."
+              : payload.nextAction,
+          },
+          updatedAt: new Date().toISOString(),
+        };
+      }),
+    );
   }
 
   function answerFollowUp(jobId: string) {
@@ -752,16 +898,19 @@ export function PersonalOpsApp() {
           <div className="task-list">
             {inProgressTasks.map((task) => {
               const job = jobs.find((j) => j.taskCardId === task.id);
+              const workflow = workflows.find((item) => item.taskCardId === task.id);
               return (
                 <TaskItem
                   key={task.id}
                   task={task}
                   job={job}
+                  workflow={workflow}
                   isExpanded={expandedTaskId === task.id}
                   onToggle={() => toggleTask(task.id)}
                   onStart={() => confirmAndStart(task)}
                   onDone={() => completeTask(task.id)}
                   onUpdate={(patch) => updateTask(task.id, patch)}
+                  onToggleWorkflowItem={toggleWorkflowItem}
                 />
               );
             })}
@@ -779,16 +928,19 @@ export function PersonalOpsApp() {
           <div className="task-list">
             {pendingTasks.map((task) => {
               const job = jobs.find((j) => j.taskCardId === task.id);
+              const workflow = workflows.find((item) => item.taskCardId === task.id);
               return (
                 <TaskItem
                   key={task.id}
                   task={task}
                   job={job}
+                  workflow={workflow}
                   isExpanded={expandedTaskId === task.id}
                   onToggle={() => toggleTask(task.id)}
                   onStart={() => confirmAndStart(task)}
                   onDone={() => completeTask(task.id)}
                   onUpdate={(patch) => updateTask(task.id, patch)}
+                  onToggleWorkflowItem={toggleWorkflowItem}
                 />
               );
             })}
@@ -811,16 +963,19 @@ export function PersonalOpsApp() {
           <div className="task-list">
             {doneTasks.map((task) => {
               const job = jobs.find((j) => j.taskCardId === task.id);
+              const workflow = workflows.find((item) => item.taskCardId === task.id);
               return (
                 <TaskItem
                   key={task.id}
                   task={task}
                   job={job}
+                  workflow={workflow}
                   isExpanded={expandedTaskId === task.id}
                   onToggle={() => toggleTask(task.id)}
                   onStart={() => confirmAndStart(task)}
                   onDone={() => completeTask(task.id)}
                   onUpdate={(patch) => updateTask(task.id, patch)}
+                  onToggleWorkflowItem={toggleWorkflowItem}
                 />
               );
             })}

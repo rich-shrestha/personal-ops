@@ -77,3 +77,33 @@ export interface TranscriptionResult {
   text: string;
   provider: "browser" | "openai";
 }
+
+export type WorkflowExecutionLevel = "think" | "prepare" | "confirm-act" | "high-trust";
+export type WorkflowRunStatus = "draft" | "active" | "blocked" | "ready" | "done";
+
+export interface ChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+  detail?: string;
+}
+
+export interface TaxWorkflowPayload {
+  provider: "freetaxusa";
+  summary: string;
+  blockers: string[];
+  nextAction: string;
+  checklist: ChecklistItem[];
+  notes: string[];
+}
+
+export interface WorkflowRun {
+  id: string;
+  taskCardId: string;
+  workflowKey: string;
+  executionLevel: WorkflowExecutionLevel;
+  status: WorkflowRunStatus;
+  payload: TaxWorkflowPayload | Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -1,5 +1,5 @@
 import { initialIdeas, initialJobs, initialTasks } from "@/lib/mock-data";
-import { IdeaCard, Capture, AgentJob, TaskCard } from "@/lib/types";
+import { IdeaCard, Capture, AgentJob, TaskCard, WorkflowRun } from "@/lib/types";
 import { getSupabaseServerClient, hasSupabaseServer } from "@/lib/server/supabase";
 
 export interface PersistedAppState {
@@ -7,6 +7,7 @@ export interface PersistedAppState {
   tasks: TaskCard[];
   jobs: AgentJob[];
   ideas: IdeaCard[];
+  workflows: WorkflowRun[];
   provider: "supabase" | "memory";
 }
 
@@ -16,6 +17,7 @@ function seedState(): PersistedAppState {
     tasks: initialTasks,
     jobs: initialJobs,
     ideas: initialIdeas,
+    workflows: [],
     provider: "memory",
   };
 }
@@ -29,14 +31,15 @@ export async function loadAppState(): Promise<PersistedAppState> {
     const supabase = getSupabaseServerClient();
     if (!supabase) return seedState();
 
-    const [capturesRes, tasksRes, jobsRes, ideasRes] = await Promise.all([
+    const [capturesRes, tasksRes, jobsRes, ideasRes, workflowsRes] = await Promise.all([
       supabase.from("captures").select("*").order("created_at", { ascending: false }),
       supabase.from("task_cards").select("*").order("updated_at", { ascending: false }),
       supabase.from("agent_jobs").select("*").order("created_at", { ascending: false }),
       supabase.from("idea_cards").select("*").order("created_at", { ascending: false }),
+      supabase.from("workflow_runs").select("*").order("updated_at", { ascending: false }),
     ]);
 
-    if (capturesRes.error || tasksRes.error || jobsRes.error || ideasRes.error) {
+    if (capturesRes.error || tasksRes.error || jobsRes.error || ideasRes.error || workflowsRes.error) {
       return seedState();
     }
 
@@ -82,11 +85,26 @@ export async function loadAppState(): Promise<PersistedAppState> {
           }))
         : initialIdeas;
 
+    const workflows: WorkflowRun[] = (workflowsRes.data ?? []).map((row) => ({
+      id: row.id,
+      taskCardId: row.task_card_id,
+      workflowKey: row.workflow_key,
+      executionLevel: row.execution_level,
+      status: row.status,
+      payload:
+        row.payload && typeof row.payload === "object"
+          ? (row.payload as WorkflowRun["payload"])
+          : {},
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+
     return {
       captures,
       tasks: tasks.length > 0 ? tasks : initialTasks,
       jobs,
       ideas,
+      workflows,
       provider: "supabase",
     };
   } catch {
@@ -138,6 +156,16 @@ export async function saveAppState(state: Omit<PersistedAppState, "provider">) {
       prompt: idea.prompt,
       category: idea.category,
     }));
+    const workflowRows = state.workflows.map((workflow) => ({
+      id: workflow.id,
+      task_card_id: workflow.taskCardId,
+      workflow_key: workflow.workflowKey,
+      execution_level: workflow.executionLevel,
+      status: workflow.status,
+      payload: workflow.payload,
+      created_at: workflow.createdAt,
+      updated_at: workflow.updatedAt,
+    }));
 
     const ops = [];
     if (captureRows.length) {
@@ -151,6 +179,9 @@ export async function saveAppState(state: Omit<PersistedAppState, "provider">) {
     }
     if (ideaRows.length) {
       ops.push(supabase.from("idea_cards").upsert(ideaRows));
+    }
+    if (workflowRows.length) {
+      ops.push(supabase.from("workflow_runs").upsert(workflowRows));
     }
 
     const results = await Promise.all(ops);

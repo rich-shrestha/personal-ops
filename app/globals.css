@@ -212,6 +212,65 @@ button { cursor: pointer; }
   padding: 4px 0;
 }
 
+.workflow-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fcfcfb;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-summary,
+.workflow-note,
+.workflow-next {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.workflow-next {
+  color: var(--text);
+}
+
+.workflow-group {
+  display: grid;
+  gap: 8px;
+}
+
+.workflow-mini-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.workflow-check {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.workflow-check input {
+  margin-top: 2px;
+}
+
+.workflow-check-label {
+  display: block;
+  color: var(--text);
+  font-size: 0.93rem;
+}
+
+.workflow-check-detail {
+  display: block;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
 /* ─── Buttons ────────────────────────────────────────────────────────────── */
 
 .button {
