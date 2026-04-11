@@ -78,6 +78,19 @@ Concrete workflow levels and targets for this week are in:
 
 `specs/2026-04-07-automation-matrix.md`
 
+FreeTaxUSA research and browser-worker notes are in:
+
+- `specs/2026-04-11-freetaxusa-notes.md`
+- `specs/2026-04-11-browser-worker-plan.md`
+
+## Browser Worker
+
+A separate Playwright worker scaffold now lives in:
+
+`browser-worker/`
+
+This is the intended long-term execution layer for high-trust website tasks. It should run outside Vercel on a cheap worker/container and poll Supabase for explicit execution requests.
+
 ## Next Build Steps
 
 1. Run `supabase login`, `supabase link --project-ref <your-project-ref>`, and `supabase db push`, or paste the migration into the Supabase SQL editor.
