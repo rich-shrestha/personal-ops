@@ -1,6 +1,7 @@
 export type CaptureSource = "text" | "voice" | "splitcheck";
 export type TaskCategory = "finance" | "health" | "career" | "admin" | "other" | "splitcheck";
 export type TaskComplexity = "quick" | "research" | "multi-step";
+export type TaskArea = "personal" | "work";
 export type TaskStatus =
   | "inbox"
   | "triaged"
@@ -26,9 +27,11 @@ export interface TaskCard {
   id: string;
   title: string;
   context: string;
+  area: TaskArea;
   category: TaskCategory;
   complexity: TaskComplexity;
   status: TaskStatus;
+  archivedAt?: string;
   dueDate?: string;
   sourceCaptureId: string;
   createdAt: string;
@@ -57,6 +60,7 @@ export interface IdeaCard {
 export interface DraftTriage {
   title: string;
   context: string;
+  area: TaskArea;
   category: TaskCategory;
   complexity: TaskComplexity;
   dueDate?: string;
@@ -120,4 +124,14 @@ export interface WorkflowRun {
   payload: TaxWorkflowPayload | Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ThinkEntry {
+  id: string;
+  text: string;
+  claudeResponse: string;
+  extractedTasks: { title: string; context: string; complexity: TaskComplexity }[];
+  confirmedTaskIds: string[];
+  area: TaskArea | "all";
+  createdAt: string;
 }

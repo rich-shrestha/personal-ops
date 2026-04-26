@@ -5,3 +5,5 @@ npm-debug.log*
 .env.local
 .env.*.local
 .vercel
+.superpowers/
+supabase/.temp/

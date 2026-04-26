@@ -25,6 +25,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  padding-bottom: 88px;
   color: var(--text);
   font-family: var(--font);
   background: transparent;
@@ -212,6 +213,209 @@ button { cursor: pointer; }
   padding: 4px 0;
 }
 
+.overview-section {
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-tabbar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.mobile-tab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 6px;
+  border-radius: 14px;
+  font-size: 0.77rem;
+  font-weight: 600;
+}
+
+.mobile-tab.active {
+  background: rgba(13, 108, 99, 0.1);
+  color: var(--accent-strong);
+}
+
+/* ── Area toggle ─────────────────────────────────────── */
+.area-toggle {
+  display: flex;
+  gap: 0;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+  margin: 0 0 4px;
+}
+
+.area-toggle-btn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 7px 12px;
+  border-radius: 7px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+
+.area-toggle-btn.active {
+  background: #fff;
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Think tab ───────────────────────────────────────── */
+.think-input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.think-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.95rem;
+  color: var(--text);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.think-textarea::placeholder {
+  color: var(--muted);
+}
+
+.think-entry {
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.think-entry-date {
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.think-entry-text {
+  font-size: 0.9rem;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.think-entry-response {
+  font-size: 0.87rem;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.think-extracted-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(13, 108, 99, 0.04);
+  border: 1px solid rgba(13, 108, 99, 0.12);
+  border-radius: 8px;
+}
+
+.think-extracted-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.87rem;
+}
+
+.think-confirmed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.think-confirmed-chip {
+  font-size: 0.76rem;
+  padding: 2px 8px;
+  background: rgba(13, 108, 99, 0.1);
+  color: var(--accent);
+  border-radius: 99px;
+}
+
+/* ── Inline task add ─────────────────────────────────── */
+.task-add-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px dashed rgba(13, 108, 99, 0.35);
+  border-radius: var(--radius);
+  background: rgba(13, 108, 99, 0.03);
+  color: var(--text);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.task-add-input::placeholder {
+  color: var(--accent);
+  opacity: 0.6;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.overview-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 243, 237, 0.95));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.overview-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.overview-value {
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.overview-copy {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .workflow-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -366,6 +570,11 @@ button { cursor: pointer; }
   background: rgba(255, 255, 255, 0.9);
 }
 
+.danger-button {
+  color: #b14a1b;
+  border-color: rgba(177, 74, 27, 0.18);
+}
+
 .button.sm,
 .ghost-button.sm {
   padding: 7px 14px;
@@ -377,6 +586,76 @@ button { cursor: pointer; }
 .task-section {
   display: grid;
   gap: 8px;
+}
+
+.bucket-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.bucket-section {
+  display: grid;
+  gap: 8px;
+}
+
+.bucket-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px;
+}
+
+.bucket-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bucket-copy {
+  margin: 3px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.capture-inbox-list {
+  display: grid;
+  gap: 6px;
+}
+
+.capture-inbox-item {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px dashed rgba(13, 108, 99, 0.24);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.capture-inbox-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.capture-inbox-text {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.capture-inbox-actions,
+.idea-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .section-header {
@@ -472,6 +751,13 @@ button { cursor: pointer; }
   overflow: hidden;
 }
 
+.task-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .task-title {
   font-size: 0.95rem;
   font-weight: 500;
@@ -479,6 +765,25 @@ button { cursor: pointer; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.scope-pill {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.scope-pill.personal {
+  background: rgba(13, 108, 99, 0.1);
+  color: var(--accent-strong);
+}
+
+.scope-pill.work {
+  background: rgba(192, 92, 26, 0.12);
+  color: var(--warning);
 }
 
 .task-preview {
@@ -536,7 +841,7 @@ button { cursor: pointer; }
 
 .task-selects {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
 }
 
@@ -643,5 +948,11 @@ button { cursor: pointer; }
 @media (min-width: 640px) {
   .shell {
     width: min(600px, calc(100vw - 48px));
+  }
+}
+
+@media (max-width: 420px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
   }
 }

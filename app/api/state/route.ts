@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadAppState, saveAppState } from "@/lib/server/state-store";
-import { AgentJob, Capture, IdeaCard, TaskCard, WorkflowRun } from "@/lib/types";
+import { AgentJob, Capture, IdeaCard, TaskCard, ThinkEntry, WorkflowRun } from "@/lib/types";
 
 export async function GET() {
   const state = await loadAppState();
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     jobs?: AgentJob[];
     ideas?: IdeaCard[];
     workflows?: WorkflowRun[];
+    thinkEntries?: ThinkEntry[];
   };
 
   const result = await saveAppState({
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
     jobs: body.jobs ?? [],
     ideas: body.ideas ?? [],
     workflows: body.workflows ?? [],
+    thinkEntries: body.thinkEntries ?? [],
   });
 
   return NextResponse.json(result);

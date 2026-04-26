@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { buildDraft, startHeuristicJob, uid } from "@/lib/personal-ops";
-import { AgentJob, AgentJobResult, DraftTriage, TaskCard, TriageResult } from "@/lib/types";
+import { AgentJob, AgentJobResult, DraftTriage, TaskCard, TaskComplexity, ThinkEntry, TriageResult } from "@/lib/types";
 import { getTextProvider, hasAnthropic } from "@/lib/server/env";
 import { getOpenAIClient, hasOpenAI } from "@/lib/server/openai";
 
@@ -9,6 +9,40 @@ function getAnthropicClient() {
   if (!apiKey) return null;
   return new Anthropic({ apiKey });
 }
+
+// ─── Rich's personal context ─────────────────────────────────────────────────
+// Update this block whenever priorities shift. This goes into every agent call.
+const RICH_CONTEXT = `
+ABOUT RICH:
+- Developer and entrepreneur. Main projects: SplitCheck (a bill-splitting app he built and is actively growing), a job application agent, and this personal ops system.
+- Tech stack across projects: Next.js + Supabase + Claude API.
+- Uses Claude Code as his primary build tool. Works fast and iteratively.
+- Prefers async, autonomous workflows — wants things handled without babysitting them.
+
+CURRENT PRIORITIES:
+- [UPDATE: what's most important to Rich right now — e.g. "shipping SplitCheck v2", "landing a new role", "building savings"]
+- [UPDATE: anything time-sensitive — e.g. "filing taxes by April 30", "following up on a job lead"]
+
+LIFE CONTEXT:
+- [UPDATE: city/location]
+- [UPDATE: financial posture — e.g. "watching monthly spend, auditing subscriptions"]
+- [UPDATE: health habits — e.g. "gym 3x/week, tracking sleep"]
+- SplitCheck is his own app — any SplitCheck task is both a work and personal priority.
+
+HOW TO RESPOND:
+- Be direct. Assume Rich is busy. No preamble.
+- Always end with one concrete next action, not a list of options.
+- For research tasks, give a shortlist of what to look at, not a full breakdown.
+- For SplitCheck tasks, treat them as product decisions that need clear recommendations.
+- Never invent data, quotes, or rates. Flag when you need real numbers from Rich.
+`.trim();
+
+const personalOpsSystemContext = [
+  RICH_CONTEXT,
+  "This is a personal chief-of-staff system for capturing, triaging, and delegating life tasks.",
+  "Optimize for clarity and concrete next actions over brainstorming.",
+  "When triaging: prefer short action-first task titles (under 8 words), tight 1-2 sentence context, and accurate work vs personal classification.",
+].join("\n\n");
 
 function extractJson(text: string) {
   const match = text.match(/\{[\s\S]*\}/);
@@ -53,12 +87,11 @@ export async function triageCapture(rawText: string): Promise<TriageResult> {
         input: [
           {
             role: "system",
-            content:
-              "You triage personal productivity captures into compact task cards. Return JSON only.",
+            content: `${personalOpsSystemContext} You triage personal productivity captures into compact task cards. Return JSON only.`,
           },
           {
             role: "user",
-            content: `Triage this raw capture into JSON with keys: title, context, category, complexity, dueDate, flaggedAsSplitcheck.\nAllowed category: finance|health|career|admin|other|splitcheck.\nAllowed complexity: quick|research|multi-step.\nIf no due date is explicit, use null.\nRaw capture: ${rawText}`,
+            content: `Triage this raw capture into JSON with keys: title, context, area, category, complexity, dueDate, flaggedAsSplitcheck.\nAllowed area: personal|work.\nAllowed category: finance|health|career|admin|other|splitcheck.\nAllowed complexity: quick|research|multi-step.\nUse an action-first title under 8 words.\nMake context one or two tight sentences.\nIf no due date is explicit, use null.\nRaw capture: ${rawText}`,
           },
         ],
       });
@@ -69,6 +102,7 @@ export async function triageCapture(rawText: string): Promise<TriageResult> {
       const draft: DraftTriage = {
         title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : fallback.title,
         context: typeof parsed.context === "string" && parsed.context.trim() ? parsed.context.trim() : fallback.context,
+        area: parsed.area === "work" || parsed.area === "personal" ? parsed.area : fallback.area,
         category:
           parsed.category === "finance" ||
           parsed.category === "health" ||
@@ -101,12 +135,11 @@ export async function triageCapture(rawText: string): Promise<TriageResult> {
       model: "claude-sonnet-4-20250514",
       max_tokens: 300,
       temperature: 0.2,
-      system:
-        "You triage personal productivity captures into compact task cards. Return JSON only.",
+      system: `${personalOpsSystemContext} You triage personal productivity captures into compact task cards. Return JSON only.`,
       messages: [
         {
           role: "user",
-          content: `Triage this raw capture into JSON with keys: title, context, category, complexity, dueDate, flaggedAsSplitcheck.\nAllowed category: finance|health|career|admin|other|splitcheck.\nAllowed complexity: quick|research|multi-step.\nIf no due date is explicit, use null.\nRaw capture: ${rawText}`,
+          content: `Triage this raw capture into JSON with keys: title, context, area, category, complexity, dueDate, flaggedAsSplitcheck.\nAllowed area: personal|work.\nAllowed category: finance|health|career|admin|other|splitcheck.\nAllowed complexity: quick|research|multi-step.\nUse an action-first title under 8 words.\nMake context one or two tight sentences.\nIf no due date is explicit, use null.\nRaw capture: ${rawText}`,
         },
       ],
     });
@@ -121,6 +154,7 @@ export async function triageCapture(rawText: string): Promise<TriageResult> {
     const draft: DraftTriage = {
       title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : fallback.title,
       context: typeof parsed.context === "string" && parsed.context.trim() ? parsed.context.trim() : fallback.context,
+      area: parsed.area === "work" || parsed.area === "personal" ? parsed.area : fallback.area,
       category:
         parsed.category === "finance" ||
         parsed.category === "health" ||
@@ -166,7 +200,7 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
           {
             role: "system",
             content:
-              "You are a personal ops task agent. Return JSON only. Produce a concise first-pass output and ask at most one follow-up question if needed.",
+              `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only. Produce a concise first-pass output with sections for Goal, Next steps, and Blockers if any. Ask at most one follow-up question if needed.`,
           },
           {
             role: "user",
@@ -207,7 +241,7 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
       model: "claude-sonnet-4-20250514",
       max_tokens: 400,
       temperature: 0.4,
-      system: `You are a personal ops task agent. Return JSON only. Produce a concise first-pass output and ask at most one follow-up question if needed. ${getWorkflowGuidance(task)}`,
+      system: `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only. Produce a concise first-pass output with sections for Goal, Next steps, and Blockers if any. Ask at most one follow-up question if needed. ${getWorkflowGuidance(task)}`,
       messages: [
         {
           role: "user",
@@ -351,5 +385,136 @@ export async function continueAgentJob(job: AgentJob, answer: string): Promise<A
         completedAt: new Date().toISOString(),
       },
     };
+  }
+}
+
+export interface ThinkEntryResult {
+  entry: ThinkEntry;
+  provider: "heuristic" | "anthropic" | "openai";
+}
+
+function buildHeuristicThinkEntry(text: string, area: ThinkEntry["area"]): ThinkEntry {
+  return {
+    id: uid("think"),
+    text,
+    claudeResponse: "Logged. No AI provider available — tasks must be added manually.",
+    extractedTasks: [],
+    confirmedTaskIds: [],
+    area,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export async function processThinkEntry(
+  text: string,
+  area: ThinkEntry["area"],
+): Promise<ThinkEntryResult> {
+  const provider = getTextProvider();
+
+  if (provider === "heuristic") {
+    return { entry: buildHeuristicThinkEntry(text, area), provider: "heuristic" };
+  }
+
+  const systemPrompt = [
+    personalOpsSystemContext,
+    "You are a personal ops thought partner. The user is sharing what is on their mind.",
+    "Your job: respond conversationally AND extract any actionable items as tasks.",
+    "Return JSON only with two keys:",
+    '  "response": string — a direct, helpful reply (1-3 sentences max). No preamble.',
+    '  "tasks": array of { title: string, context: string, complexity: "quick" | "research" | "multi-step" }',
+    "tasks must be ranked by ascending time-to-complete (quick first).",
+    "If nothing is actionable, tasks must be an empty array.",
+    "Title must be action-first, under 8 words.",
+    "Context must be 1-2 tight sentences.",
+  ].join("\n");
+
+  const userMessage = `Here is what is on my mind:\n\n${text}`;
+
+  try {
+    if (provider === "openai" && hasOpenAI()) {
+      const client = getOpenAIClient();
+      if (!client) return { entry: buildHeuristicThinkEntry(text, area), provider: "heuristic" };
+
+      const response = await client.responses.create({
+        model: "gpt-4.1",
+        input: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+      });
+
+      const parsed = extractJson(response.output_text);
+      return {
+        provider: "openai",
+        entry: {
+          id: uid("think"),
+          text,
+          claudeResponse: typeof parsed.response === "string" ? parsed.response.trim() : "Logged.",
+          extractedTasks: Array.isArray(parsed.tasks)
+            ? (parsed.tasks as Array<{ title: string; context: string; complexity: string }>)
+                .filter(
+                  (t) =>
+                    typeof t.title === "string" &&
+                    typeof t.context === "string" &&
+                    (t.complexity === "quick" || t.complexity === "research" || t.complexity === "multi-step"),
+                )
+                .map((t) => ({
+                  title: t.title.trim(),
+                  context: t.context.trim(),
+                  complexity: t.complexity as TaskComplexity,
+                }))
+            : [],
+          confirmedTaskIds: [],
+          area,
+          createdAt: new Date().toISOString(),
+        },
+      };
+    }
+
+    const client = getAnthropicClient();
+    if (!client) return { entry: buildHeuristicThinkEntry(text, area), provider: "heuristic" };
+
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 600,
+      temperature: 0.4,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userMessage }],
+    });
+
+    const raw = response.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+
+    const parsed = extractJson(raw);
+
+    return {
+      provider: "anthropic",
+      entry: {
+        id: uid("think"),
+        text,
+        claudeResponse: typeof parsed.response === "string" ? parsed.response.trim() : "Logged.",
+        extractedTasks: Array.isArray(parsed.tasks)
+          ? (parsed.tasks as Array<{ title: string; context: string; complexity: string }>)
+              .filter(
+                (t) =>
+                  typeof t.title === "string" &&
+                  typeof t.context === "string" &&
+                  (t.complexity === "quick" || t.complexity === "research" || t.complexity === "multi-step"),
+              )
+              .map((t) => ({
+                title: t.title.trim(),
+                context: t.context.trim(),
+                complexity: t.complexity as TaskComplexity,
+              }))
+          : [],
+        confirmedTaskIds: [],
+        area,
+        createdAt: new Date().toISOString(),
+      },
+    };
+  } catch {
+    return { entry: buildHeuristicThinkEntry(text, area), provider: "heuristic" };
   }
 }

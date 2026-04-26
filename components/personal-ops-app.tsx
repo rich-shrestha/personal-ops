@@ -9,10 +9,12 @@ import {
   Capture,
   DraftTriage,
   IdeaCard,
+  TaskArea,
   TaskCard,
   TaskCategory,
   TaskComplexity,
   TaskStatus,
+  ThinkEntry,
   TriageResult,
   WorkflowRun,
   TaxWorkflowPayload,
@@ -37,11 +39,15 @@ interface PersistedState {
   jobs: AgentJob[];
   ideas: IdeaCard[];
   workflows: WorkflowRun[];
+  thinkEntries: ThinkEntry[];
 }
 
 interface StateResponse extends PersistedState {
   provider?: "supabase" | "memory";
 }
+
+type AreaToggle = "all" | TaskArea;
+type MobileTab = "active" | "think" | "done" | "ideas";
 
 function readLocalState(): PersistedState | null {
   if (typeof window === "undefined") return null;
@@ -53,7 +59,12 @@ function readLocalState(): PersistedState | null {
     const parsed = JSON.parse(saved) as PersistedState;
     return {
       captures: parsed.captures ?? [],
-      tasks: applyAutoQueue(parsed.tasks ?? []),
+      tasks: applyAutoQueue(
+        (parsed.tasks ?? []).map((task) => ({
+          ...task,
+          area: task.area === "work" ? "work" : "personal",
+        })),
+      ),
       jobs: (parsed.jobs ?? []).map((job) => ({
         ...job,
         provider:
@@ -63,6 +74,7 @@ function readLocalState(): PersistedState | null {
       })),
       ideas: parsed.ideas ?? [],
       workflows: parsed.workflows ?? [],
+      thinkEntries: parsed.thinkEntries ?? [],
     };
   } catch {
     return null;
@@ -105,6 +117,106 @@ function statusDotClass(status: TaskStatus) {
   return "dot-muted";
 }
 
+type TaskBucketKey =
+  | "next-up"
+  | "finance"
+  | "inbox"
+  | "travel"
+  | "career"
+  | "health"
+  | "splitcheck"
+  | "other";
+
+interface TaskBucket {
+  key: TaskBucketKey;
+  label: string;
+  description: string;
+  tasks: TaskCard[];
+}
+
+function sortTasksForDisplay(tasks: TaskCard[]) {
+  return [...tasks].sort((a, b) => {
+    const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+    const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+    if (aDue !== bDue) return aDue - bDue;
+
+    const statusWeight = (task: TaskCard) => {
+      if (task.status === "queued") return 0;
+      if (task.status === "triaged") return 1;
+      if (task.status === "waiting-on-you") return 2;
+      if (task.status === "in-progress") return 3;
+      return 4;
+    };
+
+    const complexityWeight = (task: TaskCard) => {
+      if (task.complexity === "quick") return 0;
+      if (task.complexity === "research") return 1;
+      return 2;
+    };
+
+    const statusDelta = statusWeight(a) - statusWeight(b);
+    if (statusDelta !== 0) return statusDelta;
+
+    const complexityDelta = complexityWeight(a) - complexityWeight(b);
+    if (complexityDelta !== 0) return complexityDelta;
+
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+}
+
+function inferTaskBucket(task: TaskCard): TaskBucketKey {
+  const haystack = `${task.title} ${task.context}`.toLowerCase();
+
+  if (task.status === "queued" && task.complexity === "quick") return "next-up";
+  if (task.category === "finance") return "finance";
+  if (task.category === "career") return "career";
+  if (task.category === "health") return "health";
+  if (task.category === "splitcheck") return "splitcheck";
+
+  if (
+    haystack.match(/inbox|reply|respond|follow up|follow-up|email|message|text back|call|reach out/)
+  ) {
+    return "inbox";
+  }
+
+  if (
+    haystack.match(/travel|trip|flight|hotel|errand|pickup|drop off|buy|purchase|renew|appointment/)
+  ) {
+    return "travel";
+  }
+
+  if (task.category === "admin" && haystack.match(/deadline|urgent|soon|today|tomorrow/)) {
+    return "next-up";
+  }
+
+  return task.category === "admin" ? "inbox" : "other";
+}
+
+
+function isArchived(task: TaskCard) {
+  return Boolean(task.archivedAt);
+}
+
+function buildTaskBuckets(tasks: TaskCard[]): TaskBucket[] {
+  const buckets: TaskBucket[] = [
+    { key: "next-up", label: "What Should I Do Next?", description: "Low-friction wins and immediate next moves.", tasks: [] },
+    { key: "finance", label: "Subscriptions and Finances", description: "Money, bills, charges, paperwork, and account tasks.", tasks: [] },
+    { key: "inbox", label: "Inbox / Follow-ups", description: "Messages, replies, outreach, and loose admin threads.", tasks: [] },
+    { key: "travel", label: "Travel / Errands", description: "Trips, logistics, renewals, and things to batch while out.", tasks: [] },
+    { key: "career", label: "Career Pipeline", description: "Applications, portfolio work, outreach, and interview prep.", tasks: [] },
+    { key: "health", label: "Health", description: "Appointments, insurance, medication, and care admin.", tasks: [] },
+    { key: "splitcheck", label: "SplitCheck", description: "Payment requests and money collection flows.", tasks: [] },
+    { key: "other", label: "Other", description: "Everything that does not fit a repeat bucket yet.", tasks: [] },
+  ];
+
+  const bucketByKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+  for (const task of sortTasksForDisplay(tasks)) {
+    bucketByKey.get(inferTaskBucket(task))?.tasks.push(task);
+  }
+
+  return buckets.filter((bucket) => bucket.tasks.length > 0);
+}
+
 // ─── TaskItem ───────────────────────────────────────────────────────────────
 
 function TaskItem({
@@ -112,9 +224,13 @@ function TaskItem({
   job,
   workflow,
   isExpanded,
+  isRunning,
   onToggle,
   onStart,
   onDone,
+  onArchive,
+  onRestore,
+  onDelete,
   onUpdate,
   onToggleWorkflowItem,
   onUpdateTaxWorkflow,
@@ -128,9 +244,13 @@ function TaskItem({
   job?: AgentJob;
   workflow?: WorkflowRun;
   isExpanded: boolean;
+  isRunning: boolean;
   onToggle: () => void;
   onStart: () => void;
   onDone: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onDelete: () => void;
   onUpdate: (patch: Partial<TaskCard>) => void;
   onToggleWorkflowItem: (workflowId: string, itemId: string) => void;
   onUpdateTaxWorkflow: (
@@ -167,7 +287,10 @@ function TaskItem({
       <button className="task-row" onClick={onToggle}>
         <span className={`status-dot ${statusDotClass(task.status)}`} />
         <div className="task-summary">
-          <span className="task-title">{task.title}</span>
+          <span className="task-title-row">
+            <span className="task-title">{task.title}</span>
+            <span className={`scope-pill ${task.area}`}>{task.area}</span>
+          </span>
           {task.context && !isExpanded && (
             <span className="task-preview">{task.context}</span>
           )}
@@ -195,6 +318,17 @@ function TaskItem({
             />
           </div>
           <div className="task-selects">
+            <div className="task-field">
+              <label className="field-label">Scope</label>
+              <select
+                className="field-input"
+                value={task.area}
+                onChange={(e) => onUpdate({ area: e.target.value as TaskArea })}
+              >
+                <option value="personal">Personal</option>
+                <option value="work">Work</option>
+              </select>
+            </div>
             <div className="task-field">
               <label className="field-label">Category</label>
               <select
@@ -458,17 +592,33 @@ function TaskItem({
           )}
 
           <div className="task-actions">
-            {task.status !== "in-progress" && task.status !== "done" && (
+            {isRunning ? (
+              <span className="working-label">Claude is working…</span>
+            ) : !isArchived(task) && task.status !== "in-progress" && task.status !== "done" ? (
               <button className="button sm" onClick={onStart}>
                 Start
               </button>
-            )}
-            {task.status === "in-progress" && !job?.followUpQuestions.length && (
+            ) : task.status === "in-progress" && !job?.followUpQuestions.length && !job ? (
               <span className="working-label">Agent working…</span>
-            )}
-            {task.status !== "done" && (
+            ) : null}
+            {task.status !== "done" && !isRunning && !isArchived(task) && (
               <button className="ghost-button sm" onClick={onDone}>
                 Done
+              </button>
+            )}
+            {!isRunning && !isArchived(task) && (
+              <button className="ghost-button sm" onClick={onArchive}>
+                Archive
+              </button>
+            )}
+            {!isRunning && isArchived(task) && (
+              <button className="ghost-button sm" onClick={onRestore}>
+                Restore
+              </button>
+            )}
+            {!isRunning && (
+              <button className="ghost-button sm danger-button" onClick={onDelete}>
+                Delete
               </button>
             )}
           </div>
@@ -496,11 +646,19 @@ export function PersonalOpsApp() {
   const [draftSourceId, setDraftSourceId] = useState<string | null>(null);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [ideasExpanded, setIdeasExpanded] = useState(false);
+  const [doneExpanded, setDoneExpanded] = useState(false);
   const [triageBusy, setTriageBusy] = useState(false);
   const [jobBusyId, setJobBusyId] = useState<string | null>(null);
   const [followUpAnswer, setFollowUpAnswer] = useState("");
   const [apiProvider, setApiProvider] = useState<"heuristic" | "anthropic" | "openai">("heuristic");
   const [storageProvider, setStorageProvider] = useState<"supabase" | "memory">("memory");
+  const [areaToggle, setAreaToggle] = useState<AreaToggle>("all");
+  const [mobileTab, setMobileTab] = useState<MobileTab>("active");
+  const [thinkEntries, setThinkEntries] = useState<ThinkEntry[]>([]);
+  const [thinkInput, setThinkInput] = useState("");
+  const [thinkBusy, setThinkBusy] = useState(false);
+  const [pendingThinkEntry, setPendingThinkEntry] = useState<ThinkEntry | null>(null);
+  const [pendingTaskChecks, setPendingTaskChecks] = useState<boolean[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -518,12 +676,14 @@ export function PersonalOpsApp() {
             jobs: payload.jobs,
             ideas: payload.ideas,
             workflows: payload.workflows ?? [],
+            thinkEntries: payload.thinkEntries ?? [],
           });
           setCaptures(nextState.captures);
           setTasks(nextState.tasks);
           setJobs(nextState.jobs);
           setIdeas(nextState.ideas);
           setWorkflows(nextState.workflows);
+          setThinkEntries(payload.thinkEntries ?? []);
           setStorageProvider("supabase");
           return;
         }
@@ -535,6 +695,7 @@ export function PersonalOpsApp() {
           setJobs(nextState.jobs);
           setIdeas(nextState.ideas);
           setWorkflows(nextState.workflows);
+          setThinkEntries(localState.thinkEntries ?? []);
         } else {
           const nextState = withAutoWorkflows({
             captures: payload.captures,
@@ -542,23 +703,27 @@ export function PersonalOpsApp() {
             jobs: payload.jobs,
             ideas: payload.ideas,
             workflows: payload.workflows ?? [],
+            thinkEntries: payload.thinkEntries ?? [],
           });
           setCaptures(nextState.captures);
           setTasks(nextState.tasks);
           setJobs(nextState.jobs);
           setIdeas(nextState.ideas);
           setWorkflows(nextState.workflows);
+          setThinkEntries(payload.thinkEntries ?? []);
         }
 
         setStorageProvider("memory");
       })
       .catch(() => {
-        const nextState = withAutoWorkflows(readLocalState() ?? {
+        const localState = readLocalState();
+        const nextState = withAutoWorkflows(localState ?? {
           captures: [],
           tasks: applyAutoQueue(initialTasks),
           jobs: initialJobs,
           ideas: initialIdeas,
           workflows: [],
+          thinkEntries: [],
         });
 
         setCaptures(nextState.captures);
@@ -566,6 +731,7 @@ export function PersonalOpsApp() {
         setJobs(nextState.jobs);
         setIdeas(nextState.ideas);
         setWorkflows(nextState.workflows);
+        setThinkEntries(localState?.thinkEntries ?? []);
         setStorageProvider("memory");
       })
       .finally(() => {
@@ -577,25 +743,31 @@ export function PersonalOpsApp() {
     if (!booted) return;
     window.localStorage.setItem(
       storageKey,
-      JSON.stringify({ captures, tasks, jobs, ideas, workflows }),
+      JSON.stringify({ captures, tasks, jobs, ideas, workflows, thinkEntries }),
     );
 
     startTransition(() => {
       void fetch("/api/state", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ captures, tasks, jobs, ideas, workflows }),
+        body: JSON.stringify({ captures, tasks, jobs, ideas, workflows, thinkEntries }),
       })
         .then(async (response) => {
-          if (!response.ok) throw new Error("State sync failed");
+          if (!response.ok) {
+            const text = await response.text().catch(() => "(unreadable)");
+            console.error("[sync] POST /api/state failed", response.status, text);
+            throw new Error("State sync failed");
+          }
           const payload = (await response.json()) as { provider?: "supabase" | "memory"; ok?: boolean };
+          console.log("[sync] POST /api/state →", payload);
           if (payload.provider) setStorageProvider(payload.provider);
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("[sync] POST /api/state catch:", err);
           setStorageProvider("memory");
         });
     });
-  }, [booted, captures, tasks, jobs, ideas, workflows]);
+  }, [booted, captures, tasks, jobs, ideas, workflows, thinkEntries]);
 
   // ─── Computed ─────────────────────────────────────────────────────────────
 
@@ -623,15 +795,69 @@ export function PersonalOpsApp() {
 
   // In Progress: agent is working / waiting on user
   const inProgressTasks = useMemo(
-    () => tasks.filter((t) => t.status === "in-progress" || t.status === "waiting-on-you"),
+    () =>
+      sortTasksForDisplay(
+        tasks.filter(
+          (t) => !isArchived(t) && (t.status === "in-progress" || t.status === "waiting-on-you"),
+        ),
+      ),
     [tasks],
   );
   // To Do: captured but not started
   const pendingTasks = useMemo(
-    () => tasks.filter((t) => t.status === "triaged" || t.status === "queued"),
+    () =>
+      sortTasksForDisplay(
+        tasks.filter((t) => !isArchived(t) && (t.status === "triaged" || t.status === "queued")),
+      ),
     [tasks],
   );
-  const doneTasks = useMemo(() => tasks.filter((t) => t.status === "done"), [tasks]);
+  const doneTasks = useMemo(
+    () => sortTasksForDisplay(tasks.filter((t) => !isArchived(t) && t.status === "done")),
+    [tasks],
+  );
+  const archivedTasks = useMemo(
+    () => sortTasksForDisplay(tasks.filter((t) => isArchived(t))),
+    [tasks],
+  );
+  function matchesArea(task: TaskCard) {
+    return areaToggle === "all" ? true : task.area === areaToggle;
+  }
+
+  const filteredInProgressTasks = useMemo(
+    () => inProgressTasks.filter((task) => matchesArea(task)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [areaToggle, inProgressTasks],
+  );
+  const filteredPendingTasks = useMemo(
+    () => pendingTasks.filter((task) => matchesArea(task)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [areaToggle, pendingTasks],
+  );
+  const filteredDoneTasks = useMemo(
+    () => doneTasks.filter((task) => matchesArea(task)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [areaToggle, doneTasks],
+  );
+  const filteredArchivedTasks = useMemo(
+    () => archivedTasks.filter((task) => matchesArea(task)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [archivedTasks, areaToggle],
+  );
+  const pendingBuckets = useMemo(() => buildTaskBuckets(filteredPendingTasks), [filteredPendingTasks]);
+  const unprocessedCaptures = useMemo(() => {
+    const processedCaptureIds = new Set(tasks.map((task) => task.sourceCaptureId));
+    return captures
+      .filter((capture) => !processedCaptureIds.has(capture.id))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [captures, tasks]);
+  const waitingCount = useMemo(
+    () => jobs.filter((job) => job.status === "waiting-on-user").length,
+    [jobs],
+  );
+  const activeWorkflowCount = useMemo(
+    () => workflows.filter((workflow) => workflow.status !== "done").length,
+    [workflows],
+  );
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
 
@@ -684,6 +910,7 @@ export function PersonalOpsApp() {
       id: uid("task"),
       title: draft.title,
       context: draft.context,
+      area: draft.area,
       category: draft.flaggedAsSplitcheck ? "splitcheck" : draft.category,
       complexity: draft.complexity,
       status,
@@ -761,6 +988,34 @@ export function PersonalOpsApp() {
           : workflow,
       ),
     );
+  }
+
+  function archiveTask(taskId: string) {
+    updateTask(taskId, { archivedAt: new Date().toISOString() });
+    setExpandedTaskId((current) => (current === taskId ? null : current));
+  }
+
+  function restoreTask(taskId: string) {
+    updateTask(taskId, { archivedAt: undefined });
+  }
+
+  function deleteTask(taskId: string) {
+    setTasks((current) => current.filter((task) => task.id !== taskId));
+    setJobs((current) => current.filter((job) => job.taskCardId !== taskId));
+    setWorkflows((current) => current.filter((workflow) => workflow.taskCardId !== taskId));
+    setExpandedTaskId((current) => (current === taskId ? null : current));
+  }
+
+  function deleteCapture(captureId: string) {
+    setCaptures((current) => current.filter((capture) => capture.id !== captureId));
+    if (draftSourceId === captureId) {
+      setDraft(null);
+      setDraftSourceId(null);
+    }
+  }
+
+  function deleteIdea(ideaId: string) {
+    setIdeas((current) => current.filter((idea) => idea.id !== ideaId));
   }
 
   function toggleWorkflowItem(workflowId: string, itemId: string) {
@@ -907,6 +1162,7 @@ export function PersonalOpsApp() {
         id: uid("task"),
         title: idea.title,
         context: idea.prompt,
+        area: "personal",
         category: idea.category,
         complexity: "quick",
         status: "queued",
@@ -1016,6 +1272,81 @@ export function PersonalOpsApp() {
     setExpandedTaskId((current) => (current === id ? null : id));
   }
 
+  async function submitThinkEntry() {
+    const text = thinkInput.trim();
+    if (!text || thinkBusy) return;
+    setThinkBusy(true);
+    try {
+      const response = await fetch("/api/think", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, area: areaToggle }),
+      });
+      if (!response.ok) throw new Error("Think API failed");
+      const data = (await response.json()) as { entry: ThinkEntry };
+      setPendingThinkEntry(data.entry);
+      setPendingTaskChecks(data.entry.extractedTasks.map(() => true));
+      setThinkInput("");
+    } catch {
+      const fallback: ThinkEntry = {
+        id: `think-${Math.random().toString(36).slice(2, 10)}`,
+        text,
+        claudeResponse: "Could not reach AI — entry saved locally.",
+        extractedTasks: [],
+        confirmedTaskIds: [],
+        area: areaToggle,
+        createdAt: new Date().toISOString(),
+      };
+      setThinkEntries((current) => [fallback, ...current]);
+      setThinkInput("");
+    } finally {
+      setThinkBusy(false);
+    }
+  }
+
+  function confirmThinkTasks() {
+    if (!pendingThinkEntry) return;
+    const now = new Date().toISOString();
+    const confirmedTasks: TaskCard[] = pendingThinkEntry.extractedTasks
+      .filter((_, i) => pendingTaskChecks[i])
+      .map((t) => ({
+        id: `task-${Math.random().toString(36).slice(2, 10)}`,
+        title: t.title,
+        context: t.context,
+        area: pendingThinkEntry.area === "all" ? "personal" : pendingThinkEntry.area,
+        category: "other" as const,
+        complexity: t.complexity,
+        status: "triaged" as const,
+        sourceCaptureId: "",
+        createdAt: now,
+        updatedAt: now,
+      }));
+    const confirmedIds = confirmedTasks.map((t) => t.id);
+    const finalEntry: ThinkEntry = { ...pendingThinkEntry, confirmedTaskIds: confirmedIds };
+    setThinkEntries((current) => [finalEntry, ...current]);
+    setTasks((current) => [...confirmedTasks, ...current]);
+    setPendingThinkEntry(null);
+    setPendingTaskChecks([]);
+  }
+
+  function addDirectTask(title: string) {
+    if (!title.trim()) return;
+    const now = new Date().toISOString();
+    const task: TaskCard = {
+      id: `task-${Math.random().toString(36).slice(2, 10)}`,
+      title: title.trim(),
+      context: "",
+      area: areaToggle === "all" ? "personal" : areaToggle,
+      category: "other",
+      complexity: "quick",
+      status: "triaged",
+      sourceCaptureId: "",
+      createdAt: now,
+      updatedAt: now,
+    };
+    setTasks((current) => [task, ...current]);
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -1069,6 +1400,17 @@ export function PersonalOpsApp() {
                 }
               />
               <div className="triage-meta">
+                <select
+                  value={draft.area}
+                  onChange={(e) =>
+                    setDraft((d) =>
+                      d ? { ...d, area: e.target.value as TaskArea } : d,
+                    )
+                  }
+                >
+                  <option value="personal">Personal</option>
+                  <option value="work">Work</option>
+                </select>
                 <select
                   value={draft.category}
                   onChange={(e) =>
@@ -1151,15 +1493,109 @@ export function PersonalOpsApp() {
         </section>
       )}
 
+      <div className="area-toggle">
+        <button className={`area-toggle-btn${areaToggle === "all" ? " active" : ""}`} onClick={() => setAreaToggle("all")}>All</button>
+        <button className={`area-toggle-btn${areaToggle === "personal" ? " active" : ""}`} onClick={() => setAreaToggle("personal")}>Personal</button>
+        <button className={`area-toggle-btn${areaToggle === "work" ? " active" : ""}`} onClick={() => setAreaToggle("work")}>Work</button>
+      </div>
+
+      <nav className="mobile-tabbar">
+        <button className={`mobile-tab${mobileTab === "active" ? " active" : ""}`} onClick={() => setMobileTab("active")}>Active</button>
+        <button className={`mobile-tab${mobileTab === "think" ? " active" : ""}`} onClick={() => setMobileTab("think")}>Think</button>
+        <button className={`mobile-tab${mobileTab === "done" ? " active" : ""}`} onClick={() => setMobileTab("done")}>Done</button>
+        <button className={`mobile-tab${mobileTab === "ideas" ? " active" : ""}`} onClick={() => setMobileTab("ideas")}>Ideas</button>
+      </nav>
+
+      {mobileTab === "active" && (
+      <section className="overview-section">
+        <div className="section-header">
+          <span>Overview</span>
+        </div>
+        <div className="overview-grid">
+          <article className="overview-card">
+            <div className="overview-label">Capture inbox</div>
+            <div className="overview-value">{unprocessedCaptures.length}</div>
+            <p className="overview-copy">
+              Raw captures that have not been turned into a task yet.
+            </p>
+          </article>
+          <article className="overview-card">
+            <div className="overview-label">Next up</div>
+            <div className="overview-value">
+              {filteredPendingTasks.filter((task) => inferTaskBucket(task) === "next-up").length}
+            </div>
+            <p className="overview-copy">
+              Quick wins and immediate next actions.
+            </p>
+          </article>
+          <article className="overview-card">
+            <div className="overview-label">Waiting on you</div>
+            <div className="overview-value">{waitingCount}</div>
+            <p className="overview-copy">
+              Agent questions that need an answer before work can continue.
+            </p>
+          </article>
+          <article className="overview-card">
+            <div className="overview-label">Active workflows</div>
+            <div className="overview-value">{activeWorkflowCount}</div>
+            <p className="overview-copy">
+              Structured flows like tax prep that are still in motion.
+            </p>
+          </article>
+        </div>
+      </section>
+      )}
+
+      {mobileTab === "active" && unprocessedCaptures.length > 0 && (
+        <section className="task-section">
+          <div className="section-header">
+            <span>Capture Inbox</span>
+            <span className="count-badge">{unprocessedCaptures.length}</span>
+          </div>
+          <div className="capture-inbox-list">
+            {unprocessedCaptures.slice(0, 6).map((capture) => (
+              <article className="capture-inbox-item" key={capture.id}>
+                <div className="capture-inbox-meta">
+                  <span>{capture.source}</span>
+                  <span>{new Date(capture.createdAt).toLocaleDateString()}</span>
+                </div>
+                <p className="capture-inbox-text">{capture.rawText}</p>
+                <div className="capture-inbox-actions">
+                  <button className="ghost-button sm danger-button" onClick={() => deleteCapture(capture.id)}>
+                    Delete
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Inline task add on Active tab */}
+      {mobileTab === "active" && (
+        <section style={{ padding: "0 0 8px" }}>
+          <input
+            className="task-add-input"
+            placeholder="+ Add a task..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                addDirectTask(e.currentTarget.value);
+                e.currentTarget.value = "";
+              }
+            }}
+          />
+        </section>
+      )}
+
       {/* In Progress — agent working, output visible */}
-      {inProgressTasks.length > 0 && (
+      {mobileTab === "active" && filteredInProgressTasks.length > 0 && (
         <section className="task-section">
           <div className="section-header">
             <span>In Progress</span>
-            <span className="count-badge">{inProgressTasks.length}</span>
+            <span className="count-badge">{filteredInProgressTasks.length}</span>
           </div>
           <div className="task-list">
-            {inProgressTasks.map((task) => {
+            {filteredInProgressTasks.map((task) => {
               const job = jobs.find((j) => j.taskCardId === task.id);
               const workflow = workflows.find((item) => item.taskCardId === task.id);
               return (
@@ -1169,9 +1605,13 @@ export function PersonalOpsApp() {
                   job={job}
                   workflow={workflow}
                   isExpanded={expandedTaskId === task.id}
+                  isRunning={jobBusyId === task.id}
                   onToggle={() => toggleTask(task.id)}
                   onStart={() => confirmAndStart(task)}
                   onDone={() => completeTask(task.id)}
+                  onArchive={() => archiveTask(task.id)}
+                  onRestore={() => restoreTask(task.id)}
+                  onDelete={() => deleteTask(task.id)}
                   onUpdate={(patch) => updateTask(task.id, patch)}
                   onToggleWorkflowItem={toggleWorkflowItem}
                   onUpdateTaxWorkflow={updateTaxWorkflow}
@@ -1187,85 +1627,253 @@ export function PersonalOpsApp() {
         </section>
       )}
 
-      {/* To Do — captured, not yet started */}
-      {pendingTasks.length > 0 && (
+      {/* Organized backlog */}
+      {mobileTab === "active" && pendingBuckets.length > 0 && (
         <section className="task-section">
           <div className="section-header">
-            <span>To Do</span>
-            <span className="count-badge">{pendingTasks.length}</span>
+            <span>Organized Backlog</span>
+            <span className="count-badge">{filteredPendingTasks.length}</span>
           </div>
-          <div className="task-list">
-            {pendingTasks.map((task) => {
-              const job = jobs.find((j) => j.taskCardId === task.id);
-              const workflow = workflows.find((item) => item.taskCardId === task.id);
-              return (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  job={job}
-                  workflow={workflow}
-                  isExpanded={expandedTaskId === task.id}
-                  onToggle={() => toggleTask(task.id)}
-                  onStart={() => confirmAndStart(task)}
-                  onDone={() => completeTask(task.id)}
-                  onUpdate={(patch) => updateTask(task.id, patch)}
-                  onToggleWorkflowItem={toggleWorkflowItem}
-                  onUpdateTaxWorkflow={updateTaxWorkflow}
-                  onStartTaxSession={startTaxSession}
-                  onAdvanceTaxSession={advanceTaxSession}
-                  onResetTaxSession={resetTaxFilingSession}
-                  onPrepareBrowserHandoff={prepareBrowserHandoff}
-                  onRequestBrowserExecution={requestBrowserExecution}
-                />
-              );
-            })}
+          <div className="bucket-stack">
+            {pendingBuckets.map((bucket) => (
+              <section className="bucket-section" key={bucket.key}>
+                <div className="bucket-header">
+                  <div>
+                    <div className="bucket-title">{bucket.label}</div>
+                    <p className="bucket-copy">{bucket.description}</p>
+                  </div>
+                  <span className="count-badge">{bucket.tasks.length}</span>
+                </div>
+                <div className="task-list">
+                  {bucket.tasks.map((task) => {
+                    const job = jobs.find((j) => j.taskCardId === task.id);
+                    const workflow = workflows.find((item) => item.taskCardId === task.id);
+                    return (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        job={job}
+                        workflow={workflow}
+                        isExpanded={expandedTaskId === task.id}
+                        isRunning={jobBusyId === task.id}
+                        onToggle={() => toggleTask(task.id)}
+                        onStart={() => confirmAndStart(task)}
+                        onDone={() => completeTask(task.id)}
+                        onArchive={() => archiveTask(task.id)}
+                        onRestore={() => restoreTask(task.id)}
+                        onDelete={() => deleteTask(task.id)}
+                        onUpdate={(patch) => updateTask(task.id, patch)}
+                        onToggleWorkflowItem={toggleWorkflowItem}
+                        onUpdateTaxWorkflow={updateTaxWorkflow}
+                        onStartTaxSession={startTaxSession}
+                        onAdvanceTaxSession={advanceTaxSession}
+                        onResetTaxSession={resetTaxFilingSession}
+                        onPrepareBrowserHandoff={prepareBrowserHandoff}
+                        onRequestBrowserExecution={requestBrowserExecution}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         </section>
       )}
 
       {/* Empty state */}
-      {inProgressTasks.length === 0 && pendingTasks.length === 0 && doneTasks.length === 0 && (
+      {mobileTab === "active" && filteredInProgressTasks.length === 0 && filteredPendingTasks.length === 0 && (
         <div className="empty-hint">Nothing here yet. Add something above.</div>
       )}
 
-      {/* Done — completed tasks with output */}
-      {doneTasks.length > 0 && (
-        <section className="task-section">
-          <div className="section-header">
+      {/* Think tab */}
+      {mobileTab === "think" && (
+        <section className="content-section">
+          <div className="think-input-wrap">
+            <textarea
+              className="think-textarea"
+              placeholder={"What's on your mind? Dump tasks, think out loud, or ask Claude anything.\n\nClaude will extract actionable items and rank them by time."}
+              value={thinkInput}
+              onChange={(e) => setThinkInput(e.target.value)}
+            />
+            <button
+              className="button"
+              disabled={!thinkInput.trim() || thinkBusy}
+              onClick={() => void submitThinkEntry()}
+            >
+              {thinkBusy ? "Thinking..." : "Submit"}
+            </button>
+          </div>
+
+          {pendingThinkEntry && (
+            <article className="think-entry" style={{ marginTop: 12 }}>
+              <div className="think-entry-response">{pendingThinkEntry.claudeResponse}</div>
+              {pendingThinkEntry.extractedTasks.length > 0 && (
+                <div className="think-extracted-tasks">
+                  <div style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--accent)", marginBottom: 4 }}>
+                    Tasks found — uncheck any you don&apos;t want:
+                  </div>
+                  {pendingThinkEntry.extractedTasks.map((t, i) => (
+                    <label key={i} className="think-extracted-task">
+                      <input
+                        type="checkbox"
+                        checked={pendingTaskChecks[i] ?? true}
+                        onChange={(e) =>
+                          setPendingTaskChecks((checks) =>
+                            checks.map((c, j) => (j === i ? e.target.checked : c)),
+                          )
+                        }
+                      />
+                      <span>
+                        <strong>{t.title}</strong>
+                        <span style={{ color: "var(--muted)", marginLeft: 6, fontSize: "0.8rem" }}>({t.complexity})</span>
+                        <br />
+                        <span style={{ color: "var(--muted)" }}>{t.context}</span>
+                      </span>
+                    </label>
+                  ))}
+                  <button className="button" style={{ marginTop: 6 }} onClick={confirmThinkTasks}>
+                    Add {pendingTaskChecks.filter(Boolean).length} task{pendingTaskChecks.filter(Boolean).length !== 1 ? "s" : ""}
+                  </button>
+                </div>
+              )}
+              {pendingThinkEntry.extractedTasks.length === 0 && (
+                <button
+                  className="button"
+                  style={{ marginTop: 6 }}
+                  onClick={() => {
+                    setThinkEntries((current) => [pendingThinkEntry, ...current]);
+                    setPendingThinkEntry(null);
+                  }}
+                >
+                  Save entry
+                </button>
+              )}
+            </article>
+          )}
+
+          {thinkEntries.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+              <div className="section-header"><span>Past entries</span></div>
+              {thinkEntries.map((entry) => (
+                <article key={entry.id} className="think-entry">
+                  <div className="think-entry-date">
+                    {new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </div>
+                  <div className="think-entry-text">
+                    {entry.text.length > 120 ? entry.text.slice(0, 120) + "…" : entry.text}
+                  </div>
+                  {entry.claudeResponse && (
+                    <div className="think-entry-response">{entry.claudeResponse}</div>
+                  )}
+                  {entry.confirmedTaskIds.length > 0 && (
+                    <div className="think-confirmed-chips">
+                      {entry.confirmedTaskIds.map((id) => {
+                        const task = tasks.find((t) => t.id === id);
+                        return task ? <span key={id} className="think-confirmed-chip">{task.title}</span> : null;
+                      })}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Done — collapsible, tap to see results */}
+      {mobileTab === "done" && filteredDoneTasks.length > 0 && (
+        <section className="ideas-section">
+          <button className="section-toggle" onClick={() => setDoneExpanded((v) => !v)}>
             <span>Done</span>
-            <span className="count-badge">{doneTasks.length}</span>
-          </div>
-          <div className="task-list">
-            {doneTasks.map((task) => {
-              const job = jobs.find((j) => j.taskCardId === task.id);
-              const workflow = workflows.find((item) => item.taskCardId === task.id);
-              return (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  job={job}
-                  workflow={workflow}
-                  isExpanded={expandedTaskId === task.id}
-                  onToggle={() => toggleTask(task.id)}
-                  onStart={() => confirmAndStart(task)}
-                  onDone={() => completeTask(task.id)}
-                  onUpdate={(patch) => updateTask(task.id, patch)}
-                  onToggleWorkflowItem={toggleWorkflowItem}
-                  onUpdateTaxWorkflow={updateTaxWorkflow}
-                  onStartTaxSession={startTaxSession}
-                  onAdvanceTaxSession={advanceTaxSession}
-                  onResetTaxSession={resetTaxFilingSession}
-                  onPrepareBrowserHandoff={prepareBrowserHandoff}
-                  onRequestBrowserExecution={requestBrowserExecution}
-                />
-              );
-            })}
-          </div>
+            <span className="count-badge">{filteredDoneTasks.length}</span>
+            <span className="toggle-arrow">{doneExpanded ? "↑" : "↓"}</span>
+          </button>
+          {doneExpanded && (
+            <div className="task-list">
+              {filteredDoneTasks.map((task) => {
+                const job = jobs.find((j) => j.taskCardId === task.id);
+                const workflow = workflows.find((item) => item.taskCardId === task.id);
+                return (
+                  <TaskItem
+                    key={task.id}
+                    task={task}
+                    job={job}
+                    workflow={workflow}
+                    isExpanded={expandedTaskId === task.id}
+                    isRunning={false}
+                    onToggle={() => toggleTask(task.id)}
+                    onStart={() => confirmAndStart(task)}
+                    onDone={() => completeTask(task.id)}
+                    onArchive={() => archiveTask(task.id)}
+                    onRestore={() => restoreTask(task.id)}
+                    onDelete={() => deleteTask(task.id)}
+                    onUpdate={(patch) => updateTask(task.id, patch)}
+                    onToggleWorkflowItem={toggleWorkflowItem}
+                    onUpdateTaxWorkflow={updateTaxWorkflow}
+                    onStartTaxSession={startTaxSession}
+                    onAdvanceTaxSession={advanceTaxSession}
+                    onResetTaxSession={resetTaxFilingSession}
+                    onPrepareBrowserHandoff={prepareBrowserHandoff}
+                    onRequestBrowserExecution={requestBrowserExecution}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {mobileTab === "done" && filteredDoneTasks.length === 0 && (
+        <div className="empty-hint">No done items in this filter.</div>
+      )}
+
+      {mobileTab === "done" && filteredArchivedTasks.length > 0 && (
+        <section className="ideas-section">
+          <button className="section-toggle" onClick={() => setDoneExpanded((v) => !v)}>
+            <span>Archived</span>
+            <span className="count-badge">{filteredArchivedTasks.length}</span>
+            <span className="toggle-arrow">{doneExpanded ? "↑" : "↓"}</span>
+          </button>
+          {doneExpanded && filteredArchivedTasks.length > 0 && (
+            <div className="task-list">
+              {filteredArchivedTasks.map((task) => {
+                const job = jobs.find((j) => j.taskCardId === task.id);
+                const workflow = workflows.find((item) => item.taskCardId === task.id);
+                return (
+                  <TaskItem
+                    key={task.id}
+                    task={task}
+                    job={job}
+                    workflow={workflow}
+                    isExpanded={expandedTaskId === task.id}
+                    isRunning={false}
+                    onToggle={() => toggleTask(task.id)}
+                    onStart={() => confirmAndStart(task)}
+                    onDone={() => completeTask(task.id)}
+                    onArchive={() => archiveTask(task.id)}
+                    onRestore={() => restoreTask(task.id)}
+                    onDelete={() => deleteTask(task.id)}
+                    onUpdate={(patch) => updateTask(task.id, patch)}
+                    onToggleWorkflowItem={toggleWorkflowItem}
+                    onUpdateTaxWorkflow={updateTaxWorkflow}
+                    onStartTaxSession={startTaxSession}
+                    onAdvanceTaxSession={advanceTaxSession}
+                    onResetTaxSession={resetTaxFilingSession}
+                    onPrepareBrowserHandoff={prepareBrowserHandoff}
+                    onRequestBrowserExecution={requestBrowserExecution}
+                  />
+                );
+              })}
+            </div>
+          )}
+          {doneExpanded && filteredArchivedTasks.length === 0 && (
+            <div className="empty-hint">No archived items in this filter.</div>
+          )}
         </section>
       )}
 
       {/* Ideas — collapsible */}
-      {ideas.length > 0 && (
+      {mobileTab === "ideas" && ideas.length > 0 && (
         <section className="ideas-section">
           <button
             className="section-toggle"
@@ -1282,14 +1890,23 @@ export function PersonalOpsApp() {
                 <article className="idea-item" key={idea.id}>
                   <div className="idea-title">{idea.title}</div>
                   <p className="idea-prompt">{idea.prompt}</p>
-                  <button className="ghost-button sm" onClick={() => convertIdea(idea)}>
-                    Add this
-                  </button>
+                  <div className="idea-actions">
+                    <button className="ghost-button sm" onClick={() => convertIdea(idea)}>
+                      Add this
+                    </button>
+                    <button className="ghost-button sm danger-button" onClick={() => deleteIdea(idea.id)}>
+                      Delete
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
           )}
         </section>
+      )}
+
+      {mobileTab === "ideas" && ideas.length === 0 && (
+        <div className="empty-hint">No ideas saved right now.</div>
       )}
     </main>
   );
