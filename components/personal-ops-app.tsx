@@ -3,6 +3,7 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { initialIdeas, initialJobs, initialTasks } from "@/lib/mock-data";
 import { buildDraft, startHeuristicJob, uid } from "@/lib/personal-ops";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   AgentJob,
   AgentJobResult,
@@ -48,6 +49,10 @@ interface StateResponse extends PersistedState {
 
 type AreaToggle = "all" | TaskArea;
 type MobileTab = "active" | "think" | "done" | "ideas";
+
+interface PersonalOpsAppProps {
+  userEmail?: string;
+}
 
 function readLocalState(): PersistedState | null {
   if (typeof window === "undefined") return null;
@@ -630,7 +635,7 @@ function TaskItem({
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function PersonalOpsApp() {
+export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
   const [booted, setBooted] = useState(false);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [tasks, setTasks] = useState<TaskCard[]>([]);
@@ -662,10 +667,37 @@ export function PersonalOpsApp() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
+  async function signOut() {
+    window.localStorage.removeItem(storageKey);
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      window.location.reload();
+      return;
+    }
+
+    await supabase.auth.signOut();
+    window.location.reload();
+  }
+
   useEffect(() => {
     void fetch("/api/state")
       .then(async (response) => {
-        if (!response.ok) throw new Error("State bootstrap failed");
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            window.location.reload();
+            return {
+              captures: [],
+              tasks: [],
+              jobs: [],
+              ideas: [],
+              workflows: [],
+              thinkEntries: [],
+              provider: "memory",
+            } satisfies StateResponse;
+          }
+          throw new Error("State bootstrap failed");
+        }
         const payload = (await response.json()) as StateResponse;
         const localState = readLocalState();
 
@@ -754,6 +786,10 @@ export function PersonalOpsApp() {
       })
         .then(async (response) => {
           if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+              window.location.reload();
+              return;
+            }
             const text = await response.text().catch(() => "(unreadable)");
             console.error("[sync] POST /api/state failed", response.status, text);
             throw new Error("State sync failed");
@@ -1371,6 +1407,11 @@ export function PersonalOpsApp() {
                 ? "OpenAI"
                 : "Heuristic"}
           </span>
+          {userEmail ? (
+            <button className="ghost-button sm" onClick={() => void signOut()}>
+              {userEmail} · Sign out
+            </button>
+          ) : null}
           {(voiceSupported || (typeof window !== "undefined" && "MediaRecorder" in window)) && (
             <button
               className={`icon-button${voiceState === "recording" ? " recording" : ""}`}

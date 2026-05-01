@@ -11,14 +11,22 @@ create table if not exists public.task_cards (
   id text primary key,
   title text not null,
   context text not null default '',
+  area text not null default 'personal' check (area in ('personal', 'work')),
   category text not null check (category in ('finance', 'health', 'career', 'admin', 'other', 'splitcheck')),
   complexity text not null check (complexity in ('quick', 'research', 'multi-step')),
   status text not null check (status in ('inbox', 'triaged', 'queued', 'in-progress', 'waiting-on-you', 'done')),
+  archived_at timestamptz,
   due_date date,
   source_capture_id text references public.captures(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.task_cards
+  add column if not exists area text not null default 'personal';
+
+alter table public.task_cards
+  add column if not exists archived_at timestamptz;
 
 create table if not exists public.agent_jobs (
   id text primary key,

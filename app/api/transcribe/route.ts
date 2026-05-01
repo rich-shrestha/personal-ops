@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireAuthorizedUser } from "@/lib/server/auth";
 import { getTranscriptionProvider } from "@/lib/server/env";
 import { getOpenAIClient, hasOpenAI } from "@/lib/server/openai";
 import { TranscriptionResult } from "@/lib/types";
 
 export async function POST(request: Request) {
+  const auth = await requireAuthorizedUser();
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const formData = await request.formData();
     const audio = formData.get("audio");

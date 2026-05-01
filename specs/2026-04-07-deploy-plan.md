@@ -9,7 +9,7 @@
 
 ## What exists
 
-- `/docs/superpowers/` — Next.js project, dev server runs at localhost:3000
+- `/Users/richshrestha/Documents/Projects/personal-ops/` — Next.js project, dev server runs at localhost:3000
 - All state is localStorage — no backend needed for Phase 1
 - No environment variables required for Phase 1
 
@@ -18,7 +18,7 @@
 ## Step 1 — Confirm the project builds cleanly
 
 ```bash
-cd /Users/richshrestha/docs/superpowers
+cd /Users/richshrestha/Documents/Projects/personal-ops
 npm run build
 ```
 
@@ -28,11 +28,11 @@ Fix any build errors before continuing. TypeScript check should already pass.
 
 ## Step 2 — Create a GitHub repo for this project
 
-The project currently lives at `/docs/superpowers/` inside what might be a larger repo. Codex should:
+The project currently lives at `/Users/richshrestha/Documents/Projects/personal-ops/` as its own project repo. Codex should:
 
-1. Check if `/docs/superpowers/` is already a git repo:
+1. Check if `/Users/richshrestha/Documents/Projects/personal-ops/` is already a git repo:
    ```bash
-   cd /Users/richshrestha/docs/superpowers && git status
+   cd /Users/richshrestha/Documents/Projects/personal-ops && git status
    ```
 
 2. If not, initialize one:
@@ -102,7 +102,7 @@ Otherwise the default `personal-ops-xxx.vercel.app` URL is shareable immediately
 ## What Codex needs to execute this
 
 1. A terminal with git, gh CLI, and vercel CLI (or dashboard access)
-2. The project at `/Users/richshrestha/docs/superpowers/`
+2. The project at `/Users/richshrestha/Documents/Projects/personal-ops/`
 3. GitHub and Vercel accounts already authenticated
 
 Codex can handle Steps 1–4 autonomously if CLI tools are available. Step 5 requires DNS access.

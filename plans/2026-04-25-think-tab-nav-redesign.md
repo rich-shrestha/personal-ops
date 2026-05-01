@@ -88,7 +88,7 @@ function seedState(): PersistedAppState {
 - [ ] **Step 4: Verify TypeScript compiles**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers && npm run typecheck 2>&1 | tail -20
+cd /Users/richshrestha/Documents/Projects/personal-ops && npm run typecheck 2>&1 | tail -20
 ```
 
 Expected: errors only about `thinkEntries` missing from `loadAppState`/`saveAppState` return values (we fix those in Task 3). No other new errors.
@@ -96,7 +96,7 @@ Expected: errors only about `thinkEntries` missing from `loadAppState`/`saveAppS
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers
+cd /Users/richshrestha/Documents/Projects/personal-ops
 git add lib/types.ts lib/server/state-store.ts
 git commit -m "feat: add ThinkEntry type and thinkEntries to PersistedAppState"
 ```
@@ -258,7 +258,7 @@ export async function processThinkEntry(
 - [ ] **Step 3: Verify TypeScript compiles**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers && npm run typecheck 2>&1 | tail -20
+cd /Users/richshrestha/Documents/Projects/personal-ops && npm run typecheck 2>&1 | tail -20
 ```
 
 Expected: no new errors related to `personal-ops-ai.ts`.
@@ -266,7 +266,7 @@ Expected: no new errors related to `personal-ops-ai.ts`.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers
+cd /Users/richshrestha/Documents/Projects/personal-ops
 git add lib/server/personal-ops-ai.ts
 git commit -m "feat: add processThinkEntry AI function"
 ```
@@ -391,7 +391,7 @@ const syncTable = async (
 - [ ] **Step 7: Verify TypeScript compiles clean**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers && npm run typecheck 2>&1 | tail -20
+cd /Users/richshrestha/Documents/Projects/personal-ops && npm run typecheck 2>&1 | tail -20
 ```
 
 Expected: no errors.
@@ -399,7 +399,7 @@ Expected: no errors.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers
+cd /Users/richshrestha/Documents/Projects/personal-ops
 git add lib/server/state-store.ts
 git commit -m "feat: wire think_entries into loadAppState and saveAppState"
 ```
@@ -439,7 +439,7 @@ export async function POST(request: Request) {
 - [ ] **Step 2: Verify TypeScript compiles**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers && npm run typecheck 2>&1 | tail -20
+cd /Users/richshrestha/Documents/Projects/personal-ops && npm run typecheck 2>&1 | tail -20
 ```
 
 Expected: no errors.
@@ -460,7 +460,7 @@ Expected: JSON with `entry.claudeResponse` (a string) and `entry.extractedTasks`
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers
+cd /Users/richshrestha/Documents/Projects/personal-ops
 git add app/api/think/route.ts
 git commit -m "feat: add /api/think POST route"
 ```
@@ -509,7 +509,7 @@ Then open the app and confirm GET /api/state returns without error (the new `thi
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers
+cd /Users/richshrestha/Documents/Projects/personal-ops
 git add supabase/migrations/20260425120000_add_think_entries.sql
 git commit -m "feat: add think_entries Supabase migration"
 ```
@@ -688,7 +688,7 @@ Append after the `.mobile-tab.active` block:
 - [ ] **Step 4: Verify build**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers && npm run build 2>&1 | tail -15
+cd /Users/richshrestha/Documents/Projects/personal-ops && npm run build 2>&1 | tail -15
 ```
 
 Expected: `✓ Compiled successfully`
@@ -696,7 +696,7 @@ Expected: `✓ Compiled successfully`
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers
+cd /Users/richshrestha/Documents/Projects/personal-ops
 git add app/globals.css
 git commit -m "style: replace filter bar with area toggle; add think tab CSS"
 ```
@@ -1222,7 +1222,7 @@ Add the Think tab content after the Active tab content sections. Find the `{mobi
 - [ ] **Step 15: Typecheck and fix any remaining errors**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers && npm run typecheck 2>&1
+cd /Users/richshrestha/Documents/Projects/personal-ops && npm run typecheck 2>&1
 ```
 
 Fix any errors. Common ones:
@@ -1233,7 +1233,7 @@ Fix any errors. Common ones:
 - [ ] **Step 16: Build check**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers && npm run build 2>&1 | tail -20
+cd /Users/richshrestha/Documents/Projects/personal-ops && npm run build 2>&1 | tail -20
 ```
 
 Expected: `✓ Compiled successfully`
@@ -1251,7 +1251,7 @@ Open `http://localhost:3000`:
 - [ ] **Step 18: Commit**
 
 ```bash
-cd /Users/richshrestha/docs/superpowers
+cd /Users/richshrestha/Documents/Projects/personal-ops
 git add components/personal-ops-app.tsx app/api/state/route.ts
 git commit -m "feat: nav restructure + Think tab UI"
 ```

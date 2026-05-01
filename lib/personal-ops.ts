@@ -1,7 +1,15 @@
-import { AgentJob, DraftTriage, TaskCard, TaskCategory, TaskComplexity } from "@/lib/types";
+import { AgentJob, DraftTriage, TaskArea, TaskCard, TaskCategory, TaskComplexity } from "@/lib/types";
 
 export function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function inferArea(rawText: string): TaskArea {
+  const text = rawText.toLowerCase();
+  if (text.match(/client|meeting|slack|sprint|roadmap|deploy|bug|ticket|review|manager|coworker|work/)) {
+    return "work";
+  }
+  return "personal";
 }
 
 export function inferCategory(rawText: string): TaskCategory {
@@ -28,11 +36,13 @@ export function summarize(rawText: string) {
 }
 
 export function buildDraft(rawText: string): DraftTriage {
+  const area = inferArea(rawText);
   const category = inferCategory(rawText);
   const complexity = inferComplexity(rawText);
   return {
     title: summarize(rawText) || "Untitled",
     context: rawText.trim(),
+    area,
     category,
     complexity,
     flaggedAsSplitcheck: category === "splitcheck",
