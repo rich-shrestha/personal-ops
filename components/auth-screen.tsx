@@ -54,26 +54,11 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     <main className="shell">
       <section className="action-zone">
         <article className="action-card">
-          <div className="action-label">Personal Ops Access</div>
-          <h1 style={{ margin: "0 0 12px", fontSize: "1.6rem" }}>This app is private.</h1>
-          {mode === "setup" ? (
-            <p className="action-hint">
-              Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `PERSONAL_OPS_ALLOWED_EMAIL`
-              before using Google auth.
-            </p>
-          ) : mode === "forbidden" ? (
-            <p className="action-hint">
-              You don&apos;t have access to this app.
-            </p>
-          ) : (
-            <p className="action-hint">
-              Sign in with Google to continue.
-            </p>
-          )}
+          <h1 style={{ margin: "0 0 16px", fontSize: "1.6rem" }}>Private access</h1>
 
           {error && <div className="workflow-session-status">{error}</div>}
 
-          <div className="capture-row" style={{ marginTop: 16 }}>
+          <div className="capture-row">
             {mode === "forbidden" ? (
               <button className="ghost-button sm" disabled={busy} onClick={() => void signOutWrongAccount()}>
                 {busy ? "Signing out..." : "Use a different Google account"}
