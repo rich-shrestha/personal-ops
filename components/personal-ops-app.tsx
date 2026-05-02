@@ -32,6 +32,7 @@ import {
   toggleTaxChecklistItem,
   updateTaxWorkflowFields,
 } from "@/lib/workflows";
+import ScheduleView from "@/components/schedule-view";
 
 const storageKey = "personal-ops-state-v1";
 
@@ -783,6 +784,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
   const [rankingBucket, setRankingBucket] = useState<TaskBucketKey | null>(null);
   const [rankTopReason, setRankTopReason] = useState<{ bucketKey: TaskBucketKey; reason: string } | null>(null);
   const [horizonFilter, setHorizonFilter] = useState<"all" | TaskHorizon>("all");
+  const [scheduleViewActive, setScheduleViewActive] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -1815,7 +1817,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
       )}
 
       {/* In Progress — agent working, output visible */}
-      {mobileTab === "active" && filteredInProgressTasks.length > 0 && (
+      {mobileTab === "active" && !scheduleViewActive && filteredInProgressTasks.length > 0 && (
         <section className="task-section">
           <div className="section-header">
             <span>In Progress</span>
@@ -1861,7 +1863,10 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
             <button
               key={h}
               className={`horizon-btn${horizonFilter === h ? " active" : ""}`}
-              onClick={() => setHorizonFilter(h)}
+              onClick={() => {
+                setHorizonFilter(h);
+                if (h !== "today") setScheduleViewActive(false);
+              }}
             >
               {h === "all" ? "All" : h === "today" ? "Today" : h === "weekend" ? "Weekend" : "This Week"}
             </button>
@@ -1869,8 +1874,36 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         </div>
       )}
 
+      {/* List | Schedule toggle — only visible under Today filter */}
+      {mobileTab === "active" && horizonFilter === "today" && (
+        <div className="schedule-mode-toggle">
+          <button
+            className={`schedule-mode-btn${!scheduleViewActive ? " active" : ""}`}
+            onClick={() => setScheduleViewActive(false)}
+          >
+            List
+          </button>
+          <button
+            className={`schedule-mode-btn${scheduleViewActive ? " active" : ""}`}
+            onClick={() => setScheduleViewActive(true)}
+          >
+            Schedule
+          </button>
+        </div>
+      )}
+
+      {/* Schedule view — replaces task sections when active */}
+      {mobileTab === "active" && scheduleViewActive && horizonFilter === "today" && (
+        <ScheduleView
+          tasks={[...filteredInProgressTasks, ...filteredPendingTasks].filter(
+            (t) => t.horizon === "today",
+          )}
+          onUpdate={(taskId, patch) => updateTask(taskId, patch)}
+        />
+      )}
+
       {/* Organized backlog */}
-      {mobileTab === "active" && pendingBuckets.length > 0 && (
+      {mobileTab === "active" && !scheduleViewActive && pendingBuckets.length > 0 && (
         <section className="task-section">
           <div className="section-header">
             <span>Organized Backlog</span>
@@ -1937,7 +1970,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
       )}
 
       {/* Empty state */}
-      {mobileTab === "active" && filteredInProgressTasks.length === 0 && filteredPendingTasks.length === 0 && (
+      {mobileTab === "active" && !scheduleViewActive && filteredInProgressTasks.length === 0 && filteredPendingTasks.length === 0 && (
         <div className="empty-hint">Nothing here yet. Add something above.</div>
       )}
 

@@ -37,6 +37,7 @@ export interface TaskCard {
   notes?: string;
   sortOrder?: number;
   horizon?: TaskHorizon;
+  scheduledTime?: string;
   sourceCaptureId: string;
   createdAt: string;
   updatedAt: string;

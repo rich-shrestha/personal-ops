@@ -1141,3 +1141,176 @@ button { cursor: pointer; }
   background: transparent;
   color: var(--muted);
 }
+
+/* ── Schedule mode toggle (List | Schedule) ───────────────────────────────── */
+.schedule-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px 16px 8px;
+}
+.schedule-mode-btn {
+  font-size: 0.78rem;
+  padding: 5px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.schedule-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* ── Day Schedule View ────────────────────────────────────────────────────── */
+.schedule-view {
+  padding: 0 0 24px;
+}
+
+.schedule-tray {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  min-height: 52px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+
+.schedule-tray-empty {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.schedule-chip {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+.schedule-chip.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.schedule-hint {
+  font-size: 0.78rem;
+  color: var(--accent);
+  padding: 0 16px 8px;
+  font-style: italic;
+}
+
+.schedule-timeline {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.schedule-slot-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.schedule-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  min-height: 44px;
+  transition: border-color 0.12s, background 0.12s;
+}
+.schedule-slot.droppable {
+  border-color: var(--accent);
+  background: #f0faf9;
+}
+.schedule-slot.occupied {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.schedule-slot.sub-slot {
+  background: var(--surface-muted);
+  border-style: dashed;
+  min-height: 38px;
+}
+.schedule-slot.sub-slot.droppable {
+  background: #f0faf9;
+  border-color: var(--accent);
+  border-style: solid;
+}
+.schedule-slot.sub-slot.occupied {
+  background: var(--accent);
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+.slot-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 600;
+  width: 46px;
+  flex-shrink: 0;
+}
+.schedule-slot.occupied .slot-label {
+  color: rgba(255, 255, 255, 0.75);
+}
+.slot-label.sub {
+  font-weight: 400;
+  font-size: 0.68rem;
+  width: 62px;
+}
+
+.slot-task-block {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.slot-task-title {
+  font-size: 0.82rem;
+  color: #fff;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-remove {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.slot-expand-hint {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.schedule-slot.droppable .slot-expand-hint {
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+}

@@ -93,6 +93,7 @@ export async function loadAppState(): Promise<PersistedAppState> {
       horizon: VALID_HORIZONS.has(row.horizon as string)
         ? (row.horizon as TaskCard["horizon"])
         : undefined,
+      scheduledTime: typeof row.scheduled_time === "string" ? row.scheduled_time : undefined,
       sourceCaptureId: row.source_capture_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -199,6 +200,7 @@ export async function saveAppState(state: Omit<PersistedAppState, "provider"> & 
       notes: task.notes ?? null,
       sort_order: task.sortOrder ?? null,
       horizon: task.horizon ?? null,
+      scheduled_time: task.scheduledTime ?? null,
       source_capture_id: captureIdSet.has(task.sourceCaptureId) ? task.sourceCaptureId : null,
       created_at: task.createdAt,
       updated_at: task.updatedAt,
