@@ -377,7 +377,7 @@ function TaskItem({
               rows={3}
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
-              placeholder="Add context, links, or reminders…"
+              placeholder="Add your own context, links, or reminders…"
               autoFocus
             />
             <div className="notes-actions">
@@ -403,17 +403,18 @@ function TaskItem({
           </div>
         ) : task.notes ? (
           <button
-            className="notes-preview"
+            className="context-preview"
             onClick={(e) => { e.stopPropagation(); setIsEditingNotes(true); }}
           >
-            📝 {task.notes.length > 60 ? `${task.notes.slice(0, 60)}…` : task.notes}
+            <span className="context-pencil">✏️</span>
+            <em>{task.notes.length > 80 ? `${task.notes.slice(0, 80)}…` : task.notes}</em>
           </button>
         ) : (
           <button
             className="notes-add-btn"
             onClick={(e) => { e.stopPropagation(); setIsEditingNotes(true); }}
           >
-            📝 Add note
+            + Add context
           </button>
         )}
       </div>

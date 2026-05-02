@@ -1061,8 +1061,7 @@ button { cursor: pointer; }
   padding: 0 12px 6px;
 }
 
-.notes-add-btn,
-.notes-preview {
+.notes-add-btn {
   font-size: 0.75rem;
   color: var(--muted);
   background: transparent;
@@ -1073,9 +1072,31 @@ button { cursor: pointer; }
   display: block;
   width: 100%;
   font-family: inherit;
+  opacity: 0.7;
 }
-.notes-preview {
+.notes-add-btn:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.context-preview {
+  font-size: 0.78rem;
   color: var(--text);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  width: 100%;
+  font-family: inherit;
+}
+.context-pencil {
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  opacity: 0.6;
 }
 
 .notes-editor {
