@@ -2,6 +2,7 @@ export type CaptureSource = "text" | "voice" | "splitcheck";
 export type TaskCategory = "finance" | "health" | "career" | "admin" | "other" | "splitcheck";
 export type TaskComplexity = "quick" | "research" | "multi-step";
 export type TaskArea = "personal" | "work";
+export type TaskHorizon = "today" | "weekend" | "this-week" | "someday";
 export type TaskStatus =
   | "inbox"
   | "triaged"
@@ -33,6 +34,9 @@ export interface TaskCard {
   status: TaskStatus;
   archivedAt?: string;
   dueDate?: string;
+  notes?: string;
+  sortOrder?: number;
+  horizon?: TaskHorizon;
   sourceCaptureId: string;
   createdAt: string;
   updatedAt: string;

@@ -1,5 +1,7 @@
 import { initialIdeas, initialJobs, initialTasks } from "@/lib/mock-data";
 import { IdeaCard, Capture, AgentJob, TaskCard, WorkflowRun, ThinkEntry } from "@/lib/types";
+
+const VALID_HORIZONS = new Set<string>(["today", "weekend", "this-week", "someday"]);
 import { getSupabaseServerClient, hasSupabaseServer } from "@/lib/server/supabase";
 
 export interface PersistedAppState {
@@ -86,6 +88,11 @@ export async function loadAppState(): Promise<PersistedAppState> {
       status: row.status,
       archivedAt: row.archived_at ?? undefined,
       dueDate: row.due_date ?? undefined,
+      notes: row.notes ?? undefined,
+      sortOrder: typeof row.sort_order === "number" ? row.sort_order : undefined,
+      horizon: VALID_HORIZONS.has(row.horizon as string)
+        ? (row.horizon as TaskCard["horizon"])
+        : undefined,
       sourceCaptureId: row.source_capture_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -189,6 +196,9 @@ export async function saveAppState(state: Omit<PersistedAppState, "provider"> & 
       status: task.status,
       archived_at: task.archivedAt ?? null,
       due_date: task.dueDate ?? null,
+      notes: task.notes ?? null,
+      sort_order: task.sortOrder ?? null,
+      horizon: task.horizon ?? null,
       source_capture_id: captureIdSet.has(task.sourceCaptureId) ? task.sourceCaptureId : null,
       created_at: task.createdAt,
       updated_at: task.updatedAt,

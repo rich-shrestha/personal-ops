@@ -956,3 +956,167 @@ button { cursor: pointer; }
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Bucket rank button ───────────────────────────────────────────────────── */
+.bucket-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rank-btn {
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.rank-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rank-reason {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin: 2px 0 0;
+  font-style: italic;
+}
+
+/* ── Reorder buttons ──────────────────────────────────────────────────────── */
+.task-reorder-btns {
+  display: flex;
+  gap: 4px;
+  padding: 2px 12px;
+}
+
+.reorder-btn {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+  font-family: inherit;
+}
+.reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── Horizon filter toggle ────────────────────────────────────────────────── */
+.horizon-toggle {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.horizon-btn {
+  font-size: 0.78rem;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.horizon-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* ── Horizon pills on task cards ──────────────────────────────────────────── */
+.horizon-pill {
+  display: inline-block;
+  font-size: 0.63rem;
+  padding: 1px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  margin-left: 4px;
+  vertical-align: middle;
+  font-weight: 500;
+}
+.horizon-today     { background: #fef3c7; color: #92400e; }
+.horizon-weekend   { background: #dbeafe; color: #1e40af; }
+.horizon-this-week { background: #d1fae5; color: #065f46; }
+.horizon-someday   { background: var(--surface-muted); color: var(--muted); border: 1px solid var(--line); }
+
+/* ── Task notes area ──────────────────────────────────────────────────────── */
+.task-notes-area {
+  padding: 0 12px 6px;
+}
+
+.notes-add-btn,
+.notes-preview {
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  display: block;
+  width: 100%;
+  font-family: inherit;
+}
+.notes-preview {
+  color: var(--text);
+}
+
+.notes-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notes-textarea {
+  width: 100%;
+  font-size: 0.82rem;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.notes-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.notes-save-btn,
+.notes-cancel-btn {
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  font-family: inherit;
+}
+.notes-save-btn {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.notes-cancel-btn {
+  background: transparent;
+  color: var(--muted);
+}

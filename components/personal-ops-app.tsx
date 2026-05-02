@@ -14,6 +14,7 @@ import {
   TaskCard,
   TaskCategory,
   TaskComplexity,
+  TaskHorizon,
   TaskStatus,
   ThinkEntry,
   TriageResult,
@@ -219,6 +220,15 @@ function buildTaskBuckets(tasks: TaskCard[]): TaskBucket[] {
     bucketByKey.get(inferTaskBucket(task))?.tasks.push(task);
   }
 
+  for (const bucket of buckets) {
+    bucket.tasks.sort((a, b) => {
+      if (a.sortOrder === undefined && b.sortOrder === undefined) return 0;
+      if (a.sortOrder === undefined) return 1;
+      if (b.sortOrder === undefined) return -1;
+      return a.sortOrder - b.sortOrder;
+    });
+  }
+
   return buckets.filter((bucket) => bucket.tasks.length > 0);
 }
 
@@ -237,6 +247,8 @@ function TaskItem({
   onRestore,
   onDelete,
   onUpdate,
+  onMoveUp,
+  onMoveDown,
   onToggleWorkflowItem,
   onUpdateTaxWorkflow,
   onStartTaxSession,
@@ -257,6 +269,8 @@ function TaskItem({
   onRestore: () => void;
   onDelete: () => void;
   onUpdate: (patch: Partial<TaskCard>) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   onToggleWorkflowItem: (workflowId: string, itemId: string) => void;
   onUpdateTaxWorkflow: (
     workflowId: string,
@@ -278,6 +292,12 @@ function TaskItem({
       ? (workflow.payload as TaxWorkflowPayload)
       : null;
 
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(task.notes ?? "");
+  // Sync draft when task.notes changes externally (initial load)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setNoteDraft(task.notes ?? ""); }, [task.id]);
+
   return (
     <article
       className={[
@@ -295,6 +315,35 @@ function TaskItem({
           <span className="task-title-row">
             <span className="task-title">{task.title}</span>
             <span className={`scope-pill ${task.area}`}>{task.area}</span>
+            <span
+              className={`horizon-pill horizon-${task.horizon ?? "someday"}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                const cycle: TaskHorizon[] = ["today", "weekend", "this-week", "someday"];
+                const current = task.horizon ?? "someday";
+                const next = cycle[(cycle.indexOf(current) + 1) % cycle.length];
+                onUpdate({ horizon: next });
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  const cycle: TaskHorizon[] = ["today", "weekend", "this-week", "someday"];
+                  const current = task.horizon ?? "someday";
+                  const next = cycle[(cycle.indexOf(current) + 1) % cycle.length];
+                  onUpdate({ horizon: next });
+                }
+              }}
+            >
+              {task.horizon === "today"
+                ? "Today"
+                : task.horizon === "weekend"
+                ? "Weekend"
+                : task.horizon === "this-week"
+                ? "This Week"
+                : "Someday"}
+            </span>
           </span>
           {task.context && !isExpanded && (
             <span className="task-preview">{task.context}</span>
@@ -302,6 +351,72 @@ function TaskItem({
         </div>
         <span className="task-status-label">{task.status}</span>
       </button>
+
+      {(onMoveUp || onMoveDown) && (
+        <div className="task-reorder-btns">
+          <button
+            className="reorder-btn"
+            onClick={onMoveUp}
+            disabled={!onMoveUp}
+            aria-label="Move up"
+          >▲</button>
+          <button
+            className="reorder-btn"
+            onClick={onMoveDown}
+            disabled={!onMoveDown}
+            aria-label="Move down"
+          >▼</button>
+        </div>
+      )}
+
+      <div className="task-notes-area">
+        {isEditingNotes ? (
+          <div className="notes-editor">
+            <textarea
+              className="notes-textarea"
+              rows={3}
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Add context, links, or reminders…"
+              autoFocus
+            />
+            <div className="notes-actions">
+              <button
+                className="notes-save-btn"
+                onClick={() => {
+                  onUpdate({ notes: noteDraft.trim() || undefined });
+                  setIsEditingNotes(false);
+                }}
+              >
+                Save
+              </button>
+              <button
+                className="notes-cancel-btn"
+                onClick={() => {
+                  setNoteDraft(task.notes ?? "");
+                  setIsEditingNotes(false);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : task.notes ? (
+          <button
+            className="notes-preview"
+            onClick={(e) => { e.stopPropagation(); setIsEditingNotes(true); }}
+          >
+            📝 {task.notes.length > 60 ? `${task.notes.slice(0, 60)}…` : task.notes}
+          </button>
+        ) : (
+          <button
+            className="notes-add-btn"
+            onClick={(e) => { e.stopPropagation(); setIsEditingNotes(true); }}
+          >
+            📝 Add note
+          </button>
+        )}
+      </div>
 
       {isExpanded && (
         <div className="task-body">
@@ -664,6 +779,9 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
   const [thinkBusy, setThinkBusy] = useState(false);
   const [pendingThinkEntry, setPendingThinkEntry] = useState<ThinkEntry | null>(null);
   const [pendingTaskChecks, setPendingTaskChecks] = useState<boolean[]>([]);
+  const [rankingBucket, setRankingBucket] = useState<TaskBucketKey | null>(null);
+  const [rankTopReason, setRankTopReason] = useState<{ bucketKey: TaskBucketKey; reason: string } | null>(null);
+  const [horizonFilter, setHorizonFilter] = useState<"all" | TaskHorizon>("all");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -865,9 +983,12 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
     [areaToggle, inProgressTasks],
   );
   const filteredPendingTasks = useMemo(
-    () => pendingTasks.filter((task) => matchesArea(task)),
+    () =>
+      pendingTasks
+        .filter((task) => matchesArea(task))
+        .filter((task) => horizonFilter === "all" || task.horizon === horizonFilter),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [areaToggle, pendingTasks],
+    [areaToggle, pendingTasks, horizonFilter],
   );
   const filteredDoneTasks = useMemo(
     () => doneTasks.filter((task) => matchesArea(task)),
@@ -951,6 +1072,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
       complexity: draft.complexity,
       status,
       dueDate: draft.dueDate,
+      horizon: "someday",
       sourceCaptureId: draftSourceId,
       createdAt: now,
       updatedAt: now,
@@ -981,6 +1103,68 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
           : task,
       ),
     );
+  }
+
+  function reorderTaskInBucket(
+    bucketTasks: TaskCard[],
+    taskId: string,
+    direction: "up" | "down",
+  ) {
+    const idx = bucketTasks.findIndex((t) => t.id === taskId);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= bucketTasks.length) return;
+
+    const withOrders = bucketTasks.map((t, i) => ({
+      id: t.id,
+      sortOrder: t.sortOrder ?? i * 1000,
+    }));
+
+    const orderA = withOrders[idx].sortOrder;
+    const orderB = withOrders[swapIdx].sortOrder;
+
+    setTasks((current) =>
+      current.map((t) => {
+        if (t.id === withOrders[idx].id)
+          return { ...t, sortOrder: orderB, updatedAt: new Date().toISOString() };
+        if (t.id === withOrders[swapIdx].id)
+          return { ...t, sortOrder: orderA, updatedAt: new Date().toISOString() };
+        return t;
+      }),
+    );
+  }
+
+  async function rankBucket(bucket: TaskBucket) {
+    setRankingBucket(bucket.key);
+    setRankTopReason(null);
+    try {
+      const res = await fetch("/api/rank-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tasks: bucket.tasks.map((t) => ({ id: t.id, title: t.title, context: t.context })),
+        }),
+      });
+      if (!res.ok) throw new Error("rank failed");
+      const { rankedIds, topReason } = (await res.json()) as {
+        rankedIds: string[];
+        topReason: string;
+      };
+      setTasks((current) =>
+        current.map((t) => {
+          const rankIdx = rankedIds.indexOf(t.id);
+          if (rankIdx === -1) return t;
+          return { ...t, sortOrder: rankIdx * 1000, updatedAt: new Date().toISOString() };
+        }),
+      );
+      if (topReason) {
+        setRankTopReason({ bucketKey: bucket.key, reason: topReason });
+      }
+    } catch {
+      // silently swallow — bucket stays in current order
+    } finally {
+      setRankingBucket(null);
+    }
   }
 
   function confirmAndStart(task: TaskCard) {
@@ -1376,6 +1560,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
       category: "other",
       complexity: "quick",
       status: "triaged",
+      horizon: "someday",
       sourceCaptureId: "",
       createdAt: now,
       updatedAt: now,
@@ -1668,6 +1853,21 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         </section>
       )}
 
+      {/* Horizon filter toggle */}
+      {mobileTab === "active" && (
+        <div className="horizon-toggle">
+          {(["all", "today", "weekend", "this-week"] as const).map((h) => (
+            <button
+              key={h}
+              className={`horizon-btn${horizonFilter === h ? " active" : ""}`}
+              onClick={() => setHorizonFilter(h)}
+            >
+              {h === "all" ? "All" : h === "today" ? "Today" : h === "weekend" ? "Weekend" : "This Week"}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Organized backlog */}
       {mobileTab === "active" && pendingBuckets.length > 0 && (
         <section className="task-section">
@@ -1682,11 +1882,23 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
                   <div>
                     <div className="bucket-title">{bucket.label}</div>
                     <p className="bucket-copy">{bucket.description}</p>
+                    {rankTopReason?.bucketKey === bucket.key && (
+                      <p className="rank-reason">✨ {rankTopReason.reason}</p>
+                    )}
                   </div>
-                  <span className="count-badge">{bucket.tasks.length}</span>
+                  <div className="bucket-header-actions">
+                    <button
+                      className="rank-btn"
+                      disabled={rankingBucket === bucket.key}
+                      onClick={() => void rankBucket(bucket)}
+                    >
+                      {rankingBucket === bucket.key ? "Ranking…" : "✨ Rank"}
+                    </button>
+                    <span className="count-badge">{bucket.tasks.length}</span>
+                  </div>
                 </div>
                 <div className="task-list">
-                  {bucket.tasks.map((task) => {
+                  {bucket.tasks.map((task, taskIdx) => {
                     const job = jobs.find((j) => j.taskCardId === task.id);
                     const workflow = workflows.find((item) => item.taskCardId === task.id);
                     return (
@@ -1711,6 +1923,8 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
                         onResetTaxSession={resetTaxFilingSession}
                         onPrepareBrowserHandoff={prepareBrowserHandoff}
                         onRequestBrowserExecution={requestBrowserExecution}
+                        onMoveUp={taskIdx > 0 ? () => reorderTaskInBucket(bucket.tasks, task.id, "up") : undefined}
+                        onMoveDown={taskIdx < bucket.tasks.length - 1 ? () => reorderTaskInBucket(bucket.tasks, task.id, "down") : undefined}
                       />
                     );
                   })}
