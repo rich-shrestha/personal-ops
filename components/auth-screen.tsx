@@ -5,11 +5,9 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 interface AuthScreenProps {
   mode: "login" | "setup" | "forbidden";
-  allowedEmail?: string | null;
-  currentEmail?: string | null;
 }
 
-export function AuthScreen({ mode, allowedEmail, currentEmail }: AuthScreenProps) {
+export function AuthScreen({ mode }: AuthScreenProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,11 +63,11 @@ export function AuthScreen({ mode, allowedEmail, currentEmail }: AuthScreenProps
             </p>
           ) : mode === "forbidden" ? (
             <p className="action-hint">
-              Signed in as <strong>{currentEmail ?? "unknown"}</strong>, but only <strong>{allowedEmail}</strong> is allowed.
+              You don&apos;t have access to this app.
             </p>
           ) : (
             <p className="action-hint">
-              Sign in with Google to unlock this app. Only <strong>{allowedEmail}</strong> is allowed.
+              Sign in with Google to continue.
             </p>
           )}
 

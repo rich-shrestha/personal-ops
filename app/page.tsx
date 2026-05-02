@@ -10,11 +10,11 @@ export default async function Home() {
   }
 
   if (auth.kind === "forbidden") {
-    return <AuthScreen mode="forbidden" allowedEmail={auth.allowedEmail} currentEmail={auth.email} />;
+    return <AuthScreen mode="forbidden" />;
   }
 
   if (auth.kind === "unauthenticated") {
-    return <AuthScreen mode="login" allowedEmail={auth.allowedEmail} />;
+    return <AuthScreen mode="login" />;
   }
 
   return <PersonalOpsApp userEmail={auth.email} />;
