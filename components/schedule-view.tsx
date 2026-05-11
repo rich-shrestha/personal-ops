@@ -26,6 +26,14 @@ function toKey(h: number, half: 0 | 1 = 0) {
   return `${String(h).padStart(2, "0")}:${half === 0 ? "00" : "30"}`;
 }
 
+function effortDurationLabel(effort: TaskCard["effort"]): string {
+  if (effort === "quick") return "~30 min";
+  if (effort === "medium") return "~1 hr";
+  if (effort === "deep") return "~2 hrs";
+  if (effort === "project") return "multi-day";
+  return "";
+}
+
 export default function ScheduleView({ tasks, onUpdate }: ScheduleViewProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [expandedSlot, setExpandedSlot] = useState<number | null>(null);
@@ -78,6 +86,9 @@ export default function ScheduleView({ tasks, onUpdate }: ScheduleViewProps) {
             ? selectedTask.title.slice(0, 21) + "…"
             : selectedTask.title}
           &rdquo;
+          {selectedTask.effort && (
+            <span className="schedule-effort-hint"> · {effortDurationLabel(selectedTask.effort)}</span>
+          )}
         </div>
       )}
 

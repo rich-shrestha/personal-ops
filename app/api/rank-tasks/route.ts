@@ -3,7 +3,7 @@ import { requireAuthorizedUser } from "@/lib/server/auth";
 import Anthropic from "@anthropic-ai/sdk";
 
 interface RankRequest {
-  tasks: { id: string; title: string; context: string }[];
+  tasks: { id: string; title: string; context: string; effort?: string }[];
 }
 
 interface RankResponse {
@@ -41,11 +41,11 @@ export async function POST(request: Request) {
   const taskList = tasks
     .map(
       (t, i) =>
-        `${i + 1}. ID: ${t.id}\n   Title: ${t.title}\n   Context: ${t.context || "(none)"}`,
+        `${i + 1}. ID: ${t.id}\n   Title: ${t.title}\n   Context: ${t.context || "(none)"}\n   Effort: ${t.effort ?? "unknown"}`,
     )
     .join("\n\n");
 
-  const prompt = `Rank these tasks by urgency and impact. Return only valid JSON with two keys:
+  const prompt = `Rank these tasks by urgency and impact. Factor in effort — prefer quick wins when urgency is equal. Return only valid JSON with two keys:
 - "rankedIds": array of task IDs, highest priority first
 - "topReason": one sentence explaining why the first task is most urgent
 

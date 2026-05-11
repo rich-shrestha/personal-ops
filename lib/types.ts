@@ -1,6 +1,7 @@
 export type CaptureSource = "text" | "voice" | "splitcheck";
 export type TaskCategory = "finance" | "health" | "career" | "admin" | "other" | "splitcheck";
 export type TaskComplexity = "quick" | "research" | "multi-step";
+export type TaskEffort = "quick" | "medium" | "deep" | "project";
 export type TaskArea = "personal" | "work";
 export type TaskHorizon = "today" | "weekend" | "this-week" | "someday";
 export type TaskStatus =
@@ -31,6 +32,7 @@ export interface TaskCard {
   area: TaskArea;
   category: TaskCategory;
   complexity: TaskComplexity;
+  effort?: TaskEffort;
   status: TaskStatus;
   archivedAt?: string;
   dueDate?: string;
@@ -68,6 +70,7 @@ export interface DraftTriage {
   area: TaskArea;
   category: TaskCategory;
   complexity: TaskComplexity;
+  effort?: TaskEffort;
   dueDate?: string;
   flaggedAsSplitcheck: boolean;
 }

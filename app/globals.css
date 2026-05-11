@@ -1056,6 +1056,46 @@ button { cursor: pointer; }
 .horizon-this-week { background: #d1fae5; color: #065f46; }
 .horizon-someday   { background: var(--surface-muted); color: var(--muted); border: 1px solid var(--line); }
 
+/* ── Effort pill ──────────────────────────────────────────────────────────── */
+.effort-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.63rem;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--surface-muted, #2a2a2a);
+  color: var(--muted);
+  font-weight: 500;
+  margin-left: 4px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* ── Category filter pills ────────────────────────────────────────────────── */
+.category-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+
+.category-pill {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line, #333);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.category-pill.active {
+  background: var(--accent, #6b48ff);
+  color: #fff;
+  border-color: var(--accent, #6b48ff);
+}
+
 /* ── Task notes area ──────────────────────────────────────────────────────── */
 .task-notes-area {
   padding: 0 12px 6px;

@@ -91,7 +91,7 @@ export async function triageCapture(rawText: string): Promise<TriageResult> {
           },
           {
             role: "user",
-            content: `Triage this raw capture into JSON with keys: title, context, area, category, complexity, dueDate, flaggedAsSplitcheck.\nAllowed area: personal|work.\nAllowed category: finance|health|career|admin|other|splitcheck.\nAllowed complexity: quick|research|multi-step.\nUse an action-first title under 8 words.\nMake context one or two tight sentences.\nIf no due date is explicit, use null.\nRaw capture: ${rawText}`,
+            content: `Triage this raw capture into JSON with keys: title, context, area, category, complexity, effort, dueDate, flaggedAsSplitcheck.\nAllowed area: personal|work.\nAllowed category: finance|health|career|admin|other|splitcheck.\nAllowed complexity: quick|research|multi-step.\nAllowed effort: quick (< 15 min), medium (15-60 min), deep (1-3 hrs), project (multi-day).\nUse an action-first title under 8 words.\nMake context one or two tight sentences.\nIf no due date is explicit, use null.\nRaw capture: ${rawText}`,
           },
         ],
       });
@@ -118,6 +118,10 @@ export async function triageCapture(rawText: string): Promise<TriageResult> {
           parsed.complexity === "multi-step"
             ? parsed.complexity
             : fallback.complexity,
+        effort:
+          parsed.effort === "quick" || parsed.effort === "medium" || parsed.effort === "deep" || parsed.effort === "project"
+            ? parsed.effort
+            : undefined,
         dueDate: typeof parsed.dueDate === "string" && parsed.dueDate ? parsed.dueDate : undefined,
         flaggedAsSplitcheck:
           typeof parsed.flaggedAsSplitcheck === "boolean"
@@ -139,7 +143,7 @@ export async function triageCapture(rawText: string): Promise<TriageResult> {
       messages: [
         {
           role: "user",
-          content: `Triage this raw capture into JSON with keys: title, context, area, category, complexity, dueDate, flaggedAsSplitcheck.\nAllowed area: personal|work.\nAllowed category: finance|health|career|admin|other|splitcheck.\nAllowed complexity: quick|research|multi-step.\nUse an action-first title under 8 words.\nMake context one or two tight sentences.\nIf no due date is explicit, use null.\nRaw capture: ${rawText}`,
+          content: `Triage this raw capture into JSON with keys: title, context, area, category, complexity, effort, dueDate, flaggedAsSplitcheck.\nAllowed area: personal|work.\nAllowed category: finance|health|career|admin|other|splitcheck.\nAllowed complexity: quick|research|multi-step.\nAllowed effort: quick (< 15 min), medium (15-60 min), deep (1-3 hrs), project (multi-day).\nUse an action-first title under 8 words.\nMake context one or two tight sentences.\nIf no due date is explicit, use null.\nRaw capture: ${rawText}`,
         },
       ],
     });
@@ -170,6 +174,10 @@ export async function triageCapture(rawText: string): Promise<TriageResult> {
         parsed.complexity === "multi-step"
           ? parsed.complexity
           : fallback.complexity,
+      effort:
+        parsed.effort === "quick" || parsed.effort === "medium" || parsed.effort === "deep" || parsed.effort === "project"
+          ? parsed.effort
+          : undefined,
       dueDate: typeof parsed.dueDate === "string" && parsed.dueDate ? parsed.dueDate : undefined,
       flaggedAsSplitcheck:
         typeof parsed.flaggedAsSplitcheck === "boolean"
@@ -200,11 +208,11 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
           {
             role: "system",
             content:
-              `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only. Produce a concise first-pass output with sections for Goal, Next steps, and Blockers if any. Ask at most one follow-up question if needed.`,
+              `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only.\n\nFor research tasks (e.g. "research cheaper Invisalign options", "compare loan rates", "find dentists"): do the actual research or reasoning from your training knowledge — give real findings, not just a plan to research. Structure output as: Goal → Findings (bulleted list of actual options/data) → Next steps.\n\nFor all tasks: always end your output with a "Next steps:" section containing 2-3 specific, actionable next steps the user can take today.\n\nAsk at most one follow-up question if you truly need information that would change the answer.`,
           },
           {
             role: "user",
-            content: `Start this task.\nTitle: ${task.title}\nCategory: ${task.category}\nComplexity: ${task.complexity}\nContext: ${task.context}\nReturn JSON with keys: output, followUpQuestions.\nfollowUpQuestions must be an array of strings with length 0 or 1.`,
+            content: `Start this task.\nTitle: ${task.title}\nCategory: ${task.category}\nComplexity: ${task.complexity}\nEffort: ${task.effort ?? "unknown"}\nContext: ${task.context}\nReturn JSON with keys: output, followUpQuestions.\nfollowUpQuestions must be an array of strings with length 0 or 1.\nThe output field must end with "Next steps:" followed by 2-3 bullet points.`,
           },
         ],
       });
@@ -239,13 +247,13 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
+      max_tokens: 800,
       temperature: 0.4,
-      system: `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only. Produce a concise first-pass output with sections for Goal, Next steps, and Blockers if any. Ask at most one follow-up question if needed. ${getWorkflowGuidance(task)}`,
+      system: `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only.\n\nFor research tasks (e.g. "research cheaper Invisalign options", "compare loan rates", "find dentists"): do the actual research or reasoning from your training knowledge — give real findings, not just a plan to research. Structure output as: Goal → Findings (bulleted list of actual options/data) → Next steps.\n\nFor all tasks: always end your output with a "Next steps:" section containing 2-3 specific, actionable next steps the user can take today.\n\nAsk at most one follow-up question if you truly need information that would change the answer. ${getWorkflowGuidance(task)}`,
       messages: [
         {
           role: "user",
-          content: `Start this task.\nTitle: ${task.title}\nCategory: ${task.category}\nComplexity: ${task.complexity}\nContext: ${task.context}\nReturn JSON with keys: output, followUpQuestions.\nfollowUpQuestions must be an array of strings with length 0 or 1.`,
+          content: `Start this task.\nTitle: ${task.title}\nCategory: ${task.category}\nComplexity: ${task.complexity}\nEffort: ${task.effort ?? "unknown"}\nContext: ${task.context}\nReturn JSON with keys: output, followUpQuestions.\nfollowUpQuestions must be an array of strings with length 0 or 1.\nThe output field must end with "Next steps:" followed by 2-3 bullet points.`,
         },
       ],
     });
@@ -308,11 +316,11 @@ export async function continueAgentJob(job: AgentJob, answer: string): Promise<A
           {
             role: "system",
             content:
-              "You are a personal ops agent continuing a task after a user follow-up. Return JSON only with one key: output.",
+              "You are a personal ops agent continuing a task after a user follow-up. Return JSON only with one key: output. The output must end with a 'Next steps:' section containing 2-3 concrete, actionable bullet points.",
           },
           {
             role: "user",
-            content: `Existing output: ${job.output}\nOpen question: ${job.followUpQuestions.join(" ")}\nUser answer: ${answer}\nReturn JSON with key: output.`,
+            content: `Existing output: ${job.output}\nOpen question: ${job.followUpQuestions.join(" ")}\nUser answer: ${answer}\nReturn JSON with key: output. The output must end with "Next steps:" and 2-3 bullet points.`,
           },
         ],
       });
@@ -341,14 +349,14 @@ export async function continueAgentJob(job: AgentJob, answer: string): Promise<A
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 350,
+      max_tokens: 700,
       temperature: 0.3,
       system:
-        "You are a personal ops agent continuing a task after a user follow-up. Return JSON only with one key: output.",
+        "You are a personal ops agent continuing a task after a user follow-up. Return JSON only with one key: output. The output must end with a 'Next steps:' section containing 2-3 concrete, actionable bullet points.",
       messages: [
         {
           role: "user",
-          content: `Existing output: ${job.output}\nOpen question: ${job.followUpQuestions.join(" ")}\nUser answer: ${answer}\nReturn JSON with key: output.`,
+          content: `Existing output: ${job.output}\nOpen question: ${job.followUpQuestions.join(" ")}\nUser answer: ${answer}\nReturn JSON with key: output. The output must end with "Next steps:" and 2-3 bullet points.`,
         },
       ],
     });

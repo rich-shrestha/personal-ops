@@ -124,6 +124,17 @@ function statusDotClass(status: TaskStatus) {
   return "dot-muted";
 }
 
+function effortLabel(effort: TaskCard["effort"]): string | null {
+  if (!effort) return null;
+  const map: Record<NonNullable<TaskCard["effort"]>, string> = {
+    quick: "⚡ Quick",
+    medium: "🔵 Medium",
+    deep: "🟣 Deep",
+    project: "📋 Project",
+  };
+  return map[effort];
+}
+
 type TaskBucketKey =
   | "next-up"
   | "finance"
@@ -345,6 +356,11 @@ function TaskItem({
                 ? "This Week"
                 : "Someday"}
             </span>
+            {task.effort && (
+              <span className={`effort-pill effort-${task.effort}`}>
+                {effortLabel(task.effort)}
+              </span>
+            )}
           </span>
           {task.context && !isExpanded && (
             <span className="task-preview">{task.context}</span>
@@ -476,6 +492,20 @@ function TaskItem({
                 <option value="quick">Quick</option>
                 <option value="research">Research</option>
                 <option value="multi-step">Multi-step</option>
+              </select>
+            </div>
+            <div className="task-field">
+              <label className="field-label">Effort</label>
+              <select
+                className="field-input"
+                value={task.effort ?? ""}
+                onChange={(e) => onUpdate({ effort: (e.target.value as TaskCard["effort"]) || undefined })}
+              >
+                <option value="">—</option>
+                <option value="quick">⚡ Quick (&lt;15 min)</option>
+                <option value="medium">🔵 Medium (15–60 min)</option>
+                <option value="deep">🟣 Deep (1–3 hrs)</option>
+                <option value="project">📋 Project (multi-day)</option>
               </select>
             </div>
           </div>
@@ -785,6 +815,8 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
   const [rankTopReason, setRankTopReason] = useState<{ bucketKey: TaskBucketKey; reason: string } | null>(null);
   const [horizonFilter, setHorizonFilter] = useState<"all" | TaskHorizon>("all");
   const [scheduleViewActive, setScheduleViewActive] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<"all" | TaskCategory>("all");
+  const [bucketViewActive, setBucketViewActive] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -1004,6 +1036,18 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
     [archivedTasks, areaToggle],
   );
   const pendingBuckets = useMemo(() => buildTaskBuckets(filteredPendingTasks), [filteredPendingTasks]);
+  const filteredFlatTasks = useMemo(
+    () =>
+      filteredPendingTasks
+        .filter((task) => categoryFilter === "all" || task.category === categoryFilter)
+        .sort((a, b) => {
+          if (a.sortOrder !== undefined && b.sortOrder !== undefined) return a.sortOrder - b.sortOrder;
+          if (a.sortOrder !== undefined) return -1;
+          if (b.sortOrder !== undefined) return 1;
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        }),
+    [filteredPendingTasks, categoryFilter],
+  );
   const unprocessedCaptures = useMemo(() => {
     const processedCaptureIds = new Set(tasks.map((task) => task.sourceCaptureId));
     return captures
@@ -1073,6 +1117,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
       area: draft.area,
       category: draft.flaggedAsSplitcheck ? "splitcheck" : draft.category,
       complexity: draft.complexity,
+      effort: draft.effort,
       status,
       dueDate: draft.dueDate,
       horizon: "someday",
@@ -1145,7 +1190,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tasks: bucket.tasks.map((t) => ({ id: t.id, title: t.title, context: t.context })),
+          tasks: bucket.tasks.map((t) => ({ id: t.id, title: t.title, context: t.context, effort: t.effort })),
         }),
       });
       if (!res.ok) throw new Error("rank failed");
@@ -1184,15 +1229,15 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         .then(async (response) => {
           if (!response.ok) throw new Error("Agent start failed");
           const result = (await response.json()) as AgentJobResult;
-          const nextStatus = result.job.status === "completed" ? "done" : "in-progress";
-          updateTask(task.id, { status: nextStatus });
+          // Always stay in-progress after agent runs — user must explicitly mark done via the Done button
+          updateTask(task.id, { status: "in-progress" });
           setJobs((current) => [result.job, ...current.filter((job) => job.taskCardId !== task.id)]);
           setApiProvider(result.provider);
         })
         .catch(() => {
           const job = startHeuristicJob(task);
-          const nextStatus = job.status === "completed" ? "done" : "in-progress";
-          updateTask(task.id, { status: nextStatus });
+          // Always stay in-progress after agent runs — user must explicitly mark done via the Done button
+          updateTask(task.id, { status: "in-progress" });
           setJobs((current) => [job, ...current.filter((item) => item.taskCardId !== task.id)]);
           setApiProvider("heuristic");
         })
@@ -1344,7 +1389,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
           if (!response.ok) throw new Error("Agent continue failed");
           const result = (await response.json()) as AgentJobResult;
           setJobs((current) => current.map((job) => (job.id === jobId ? result.job : job)));
-          updateTask(relatedJob.taskCardId, { status: "done" });
+          // Stay in-progress — user must explicitly mark done after reviewing agent output
           setFollowUpAnswer("");
           setApiProvider(result.provider);
         })
@@ -1362,7 +1407,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
                 : job,
             ),
           );
-          updateTask(relatedJob.taskCardId, { status: "done" });
+          // Stay in-progress — user must explicitly mark done after reviewing agent output
           setFollowUpAnswer("");
           setApiProvider("heuristic");
         })
@@ -1902,70 +1947,138 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         />
       )}
 
-      {/* Organized backlog */}
-      {mobileTab === "active" && !scheduleViewActive && pendingBuckets.length > 0 && (
+      {/* Backlog — flat list (default) or grouped (toggled) */}
+      {mobileTab === "active" && !scheduleViewActive && (filteredFlatTasks.length > 0 || pendingBuckets.length > 0) && (
         <section className="task-section">
           <div className="section-header">
-            <span>Organized Backlog</span>
-            <span className="count-badge">{filteredPendingTasks.length}</span>
+            <span>Backlog</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="count-badge">{filteredPendingTasks.length}</span>
+              <button
+                className="ghost-button sm"
+                title={bucketViewActive ? "Switch to flat list" : "Switch to grouped view"}
+                onClick={() => setBucketViewActive((v) => !v)}
+                style={{ fontSize: "1rem", padding: "2px 6px" }}
+              >
+                {bucketViewActive ? "≡" : "☰"}
+              </button>
+            </div>
           </div>
-          <div className="bucket-stack">
-            {pendingBuckets.map((bucket) => (
-              <section className="bucket-section" key={bucket.key}>
-                <div className="bucket-header">
-                  <div>
-                    <div className="bucket-title">{bucket.label}</div>
-                    <p className="bucket-copy">{bucket.description}</p>
-                    {rankTopReason?.bucketKey === bucket.key && (
-                      <p className="rank-reason">✨ {rankTopReason.reason}</p>
-                    )}
+
+          {/* Category filter pills — flat view only */}
+          {!bucketViewActive && (
+            <div className="category-filter-pills">
+              {(["all", "finance", "career", "health", "admin", "other"] as const).map((cat) => (
+                <button
+                  key={cat}
+                  className={`category-pill${categoryFilter === cat ? " active" : ""}`}
+                  onClick={() => setCategoryFilter(cat)}
+                >
+                  {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Flat list (default) */}
+          {!bucketViewActive && (
+            <div className="task-list">
+              {filteredFlatTasks.map((task, taskIdx) => {
+                const job = jobs.find((j) => j.taskCardId === task.id);
+                const workflow = workflows.find((item) => item.taskCardId === task.id);
+                return (
+                  <TaskItem
+                    key={task.id}
+                    task={task}
+                    job={job}
+                    workflow={workflow}
+                    isExpanded={expandedTaskId === task.id}
+                    isRunning={jobBusyId === task.id}
+                    onToggle={() => toggleTask(task.id)}
+                    onStart={() => confirmAndStart(task)}
+                    onDone={() => completeTask(task.id)}
+                    onArchive={() => archiveTask(task.id)}
+                    onRestore={() => restoreTask(task.id)}
+                    onDelete={() => deleteTask(task.id)}
+                    onUpdate={(patch) => updateTask(task.id, patch)}
+                    onToggleWorkflowItem={toggleWorkflowItem}
+                    onUpdateTaxWorkflow={updateTaxWorkflow}
+                    onStartTaxSession={startTaxSession}
+                    onAdvanceTaxSession={advanceTaxSession}
+                    onResetTaxSession={resetTaxFilingSession}
+                    onPrepareBrowserHandoff={prepareBrowserHandoff}
+                    onRequestBrowserExecution={requestBrowserExecution}
+                    onMoveUp={taskIdx > 0 ? () => reorderTaskInBucket(filteredFlatTasks, task.id, "up") : undefined}
+                    onMoveDown={taskIdx < filteredFlatTasks.length - 1 ? () => reorderTaskInBucket(filteredFlatTasks, task.id, "down") : undefined}
+                  />
+                );
+              })}
+              {filteredFlatTasks.length === 0 && (
+                <div className="empty-hint">No tasks match this filter.</div>
+              )}
+            </div>
+          )}
+
+          {/* Grouped bucket view (toggled) */}
+          {bucketViewActive && (
+            <div className="bucket-stack">
+              {pendingBuckets.map((bucket) => (
+                <section className="bucket-section" key={bucket.key}>
+                  <div className="bucket-header">
+                    <div>
+                      <div className="bucket-title">{bucket.label}</div>
+                      <p className="bucket-copy">{bucket.description}</p>
+                      {rankTopReason?.bucketKey === bucket.key && (
+                        <p className="rank-reason">✨ {rankTopReason.reason}</p>
+                      )}
+                    </div>
+                    <div className="bucket-header-actions">
+                      <button
+                        className="rank-btn"
+                        disabled={rankingBucket === bucket.key}
+                        onClick={() => void rankBucket(bucket)}
+                      >
+                        {rankingBucket === bucket.key ? "Ranking…" : "✨ Rank"}
+                      </button>
+                      <span className="count-badge">{bucket.tasks.length}</span>
+                    </div>
                   </div>
-                  <div className="bucket-header-actions">
-                    <button
-                      className="rank-btn"
-                      disabled={rankingBucket === bucket.key}
-                      onClick={() => void rankBucket(bucket)}
-                    >
-                      {rankingBucket === bucket.key ? "Ranking…" : "✨ Rank"}
-                    </button>
-                    <span className="count-badge">{bucket.tasks.length}</span>
+                  <div className="task-list">
+                    {bucket.tasks.map((task, taskIdx) => {
+                      const job = jobs.find((j) => j.taskCardId === task.id);
+                      const workflow = workflows.find((item) => item.taskCardId === task.id);
+                      return (
+                        <TaskItem
+                          key={task.id}
+                          task={task}
+                          job={job}
+                          workflow={workflow}
+                          isExpanded={expandedTaskId === task.id}
+                          isRunning={jobBusyId === task.id}
+                          onToggle={() => toggleTask(task.id)}
+                          onStart={() => confirmAndStart(task)}
+                          onDone={() => completeTask(task.id)}
+                          onArchive={() => archiveTask(task.id)}
+                          onRestore={() => restoreTask(task.id)}
+                          onDelete={() => deleteTask(task.id)}
+                          onUpdate={(patch) => updateTask(task.id, patch)}
+                          onToggleWorkflowItem={toggleWorkflowItem}
+                          onUpdateTaxWorkflow={updateTaxWorkflow}
+                          onStartTaxSession={startTaxSession}
+                          onAdvanceTaxSession={advanceTaxSession}
+                          onResetTaxSession={resetTaxFilingSession}
+                          onPrepareBrowserHandoff={prepareBrowserHandoff}
+                          onRequestBrowserExecution={requestBrowserExecution}
+                          onMoveUp={taskIdx > 0 ? () => reorderTaskInBucket(bucket.tasks, task.id, "up") : undefined}
+                          onMoveDown={taskIdx < bucket.tasks.length - 1 ? () => reorderTaskInBucket(bucket.tasks, task.id, "down") : undefined}
+                        />
+                      );
+                    })}
                   </div>
-                </div>
-                <div className="task-list">
-                  {bucket.tasks.map((task, taskIdx) => {
-                    const job = jobs.find((j) => j.taskCardId === task.id);
-                    const workflow = workflows.find((item) => item.taskCardId === task.id);
-                    return (
-                      <TaskItem
-                        key={task.id}
-                        task={task}
-                        job={job}
-                        workflow={workflow}
-                        isExpanded={expandedTaskId === task.id}
-                        isRunning={jobBusyId === task.id}
-                        onToggle={() => toggleTask(task.id)}
-                        onStart={() => confirmAndStart(task)}
-                        onDone={() => completeTask(task.id)}
-                        onArchive={() => archiveTask(task.id)}
-                        onRestore={() => restoreTask(task.id)}
-                        onDelete={() => deleteTask(task.id)}
-                        onUpdate={(patch) => updateTask(task.id, patch)}
-                        onToggleWorkflowItem={toggleWorkflowItem}
-                        onUpdateTaxWorkflow={updateTaxWorkflow}
-                        onStartTaxSession={startTaxSession}
-                        onAdvanceTaxSession={advanceTaxSession}
-                        onResetTaxSession={resetTaxFilingSession}
-                        onPrepareBrowserHandoff={prepareBrowserHandoff}
-                        onRequestBrowserExecution={requestBrowserExecution}
-                        onMoveUp={taskIdx > 0 ? () => reorderTaskInBucket(bucket.tasks, task.id, "up") : undefined}
-                        onMoveDown={taskIdx < bucket.tasks.length - 1 ? () => reorderTaskInBucket(bucket.tasks, task.id, "down") : undefined}
-                      />
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
+                </section>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
