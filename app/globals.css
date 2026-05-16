@@ -1061,6 +1061,28 @@ button { cursor: pointer; }
   padding: 0 12px 6px;
 }
 
+.task-reopen-row {
+  padding: 0 12px 8px;
+  text-align: right;
+}
+
+.task-reopen-btn {
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  opacity: 0.6;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.task-reopen-btn:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
 .notes-add-btn {
   font-size: 0.75rem;
   color: var(--muted);

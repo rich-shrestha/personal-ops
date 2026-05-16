@@ -257,6 +257,7 @@ function TaskItem({
   onResetTaxSession,
   onPrepareBrowserHandoff,
   onRequestBrowserExecution,
+  onReopen,
 }: {
   task: TaskCard;
   job?: AgentJob;
@@ -272,6 +273,7 @@ function TaskItem({
   onUpdate: (patch: Partial<TaskCard>) => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  onReopen?: () => void;
   onToggleWorkflowItem: (workflowId: string, itemId: string) => void;
   onUpdateTaxWorkflow: (
     workflowId: string,
@@ -419,6 +421,17 @@ function TaskItem({
           </button>
         )}
       </div>
+
+      {task.status === "done" && !isArchived(task) && onReopen && (
+        <div className="task-reopen-row">
+          <button
+            className="task-reopen-btn"
+            onClick={(e) => { e.stopPropagation(); onReopen(); }}
+          >
+            ↩ Reopen
+          </button>
+        </div>
+      )}
 
       {isExpanded && (
         <div className="task-body">
@@ -1211,6 +1224,10 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
           : workflow,
       ),
     );
+  }
+
+  function reopenTask(taskId: string) {
+    updateTask(taskId, { status: "in-progress" });
   }
 
   function archiveTask(taskId: string) {
@@ -2104,6 +2121,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
                     onResetTaxSession={resetTaxFilingSession}
                     onPrepareBrowserHandoff={prepareBrowserHandoff}
                     onRequestBrowserExecution={requestBrowserExecution}
+                    onReopen={() => reopenTask(task.id)}
                   />
                 );
               })}
