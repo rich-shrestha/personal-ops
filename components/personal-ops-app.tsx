@@ -1215,15 +1215,13 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         .then(async (response) => {
           if (!response.ok) throw new Error("Agent start failed");
           const result = (await response.json()) as AgentJobResult;
-          const nextStatus = result.job.status === "completed" ? "done" : "in-progress";
-          updateTask(task.id, { status: nextStatus });
+          updateTask(task.id, { status: "in-progress" });
           setJobs((current) => [result.job, ...current.filter((job) => job.taskCardId !== task.id)]);
           setApiProvider(result.provider);
         })
         .catch(() => {
           const job = startHeuristicJob(task);
-          const nextStatus = job.status === "completed" ? "done" : "in-progress";
-          updateTask(task.id, { status: nextStatus });
+          updateTask(task.id, { status: "in-progress" });
           setJobs((current) => [job, ...current.filter((item) => item.taskCardId !== task.id)]);
           setApiProvider("heuristic");
         })
@@ -1379,7 +1377,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
           if (!response.ok) throw new Error("Agent continue failed");
           const result = (await response.json()) as AgentJobResult;
           setJobs((current) => current.map((job) => (job.id === jobId ? result.job : job)));
-          updateTask(relatedJob.taskCardId, { status: "done" });
+          updateTask(relatedJob.taskCardId, { status: "in-progress" });
           setFollowUpAnswer("");
           setApiProvider(result.provider);
         })
@@ -1397,7 +1395,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
                 : job,
             ),
           );
-          updateTask(relatedJob.taskCardId, { status: "done" });
+          updateTask(relatedJob.taskCardId, { status: "in-progress" });
           setFollowUpAnswer("");
           setApiProvider("heuristic");
         })
