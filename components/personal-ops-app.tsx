@@ -798,6 +798,8 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
   const [rankTopReason, setRankTopReason] = useState<{ bucketKey: TaskBucketKey; reason: string } | null>(null);
   const [horizonFilter, setHorizonFilter] = useState<"all" | TaskHorizon>("all");
   const [scheduleViewActive, setScheduleViewActive] = useState(false);
+  const [bucketViewActive, setBucketViewActive] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "finance" | "career" | "health" | "admin" | "other">("all");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -1017,6 +1019,26 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
     [archivedTasks, areaToggle],
   );
   const pendingBuckets = useMemo(() => buildTaskBuckets(filteredPendingTasks), [filteredPendingTasks]);
+  const flatActiveTasks = useMemo(
+    () =>
+      [...tasks]
+        .filter((t) => !isArchived(t) && t.status !== "done")
+        .filter((t) => areaToggle === "all" || t.area === areaToggle)
+        .filter((t) => horizonFilter === "all" || t.horizon === horizonFilter)
+        .filter((t) => {
+          if (categoryFilter === "all") return true;
+          if (categoryFilter === "other") return t.category === "other" || t.category === "splitcheck";
+          return t.category === categoryFilter;
+        })
+        .sort((a, b) => {
+          if (a.sortOrder === undefined && b.sortOrder === undefined) return 0;
+          if (a.sortOrder === undefined) return 1;
+          if (b.sortOrder === undefined) return -1;
+          return a.sortOrder - b.sortOrder;
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, areaToggle, horizonFilter, categoryFilter],
+  );
   const unprocessedCaptures = useMemo(() => {
     const processedCaptureIds = new Set(tasks.map((task) => task.sourceCaptureId));
     return captures
@@ -1833,8 +1855,34 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         </section>
       )}
 
+      {/* View controls — category filter pills + bucket toggle */}
+      {mobileTab === "active" && !scheduleViewActive && (
+        <div className="list-view-controls">
+          {!bucketViewActive && (
+            <div className="category-filter-pills">
+              {(["all", "finance", "career", "health", "admin", "other"] as const).map((cat) => (
+                <button
+                  key={cat}
+                  className={`category-pill${categoryFilter === cat ? " active" : ""}`}
+                  onClick={() => setCategoryFilter(cat)}
+                >
+                  {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            className={`bucket-toggle-btn${bucketViewActive ? " active" : ""}`}
+            onClick={() => setBucketViewActive((v) => !v)}
+            title={bucketViewActive ? "Switch to flat list" : "Switch to grouped view"}
+          >
+            ☰
+          </button>
+        </div>
+      )}
+
       {/* In Progress — agent working, output visible */}
-      {mobileTab === "active" && !scheduleViewActive && filteredInProgressTasks.length > 0 && (
+      {mobileTab === "active" && !scheduleViewActive && bucketViewActive && filteredInProgressTasks.length > 0 && (
         <section className="task-section">
           <div className="section-header">
             <span>In Progress</span>
@@ -1919,8 +1967,44 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         />
       )}
 
+      {/* Flat list — default view */}
+      {mobileTab === "active" && !bucketViewActive && !scheduleViewActive && flatActiveTasks.length > 0 && (
+        <section className="task-section">
+          <div className="task-list">
+            {flatActiveTasks.map((task) => {
+              const job = jobs.find((j) => j.taskCardId === task.id);
+              const workflow = workflows.find((item) => item.taskCardId === task.id);
+              return (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  job={job}
+                  workflow={workflow}
+                  isExpanded={expandedTaskId === task.id}
+                  isRunning={jobBusyId === task.id}
+                  onToggle={() => toggleTask(task.id)}
+                  onStart={() => confirmAndStart(task)}
+                  onDone={() => completeTask(task.id)}
+                  onArchive={() => archiveTask(task.id)}
+                  onRestore={() => restoreTask(task.id)}
+                  onDelete={() => deleteTask(task.id)}
+                  onUpdate={(patch) => updateTask(task.id, patch)}
+                  onToggleWorkflowItem={toggleWorkflowItem}
+                  onUpdateTaxWorkflow={updateTaxWorkflow}
+                  onStartTaxSession={startTaxSession}
+                  onAdvanceTaxSession={advanceTaxSession}
+                  onResetTaxSession={resetTaxFilingSession}
+                  onPrepareBrowserHandoff={prepareBrowserHandoff}
+                  onRequestBrowserExecution={requestBrowserExecution}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Organized backlog */}
-      {mobileTab === "active" && !scheduleViewActive && pendingBuckets.length > 0 && (
+      {mobileTab === "active" && !scheduleViewActive && bucketViewActive && pendingBuckets.length > 0 && (
         <section className="task-section">
           <div className="section-header">
             <span>Organized Backlog</span>
@@ -1987,7 +2071,11 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
       )}
 
       {/* Empty state */}
-      {mobileTab === "active" && !scheduleViewActive && filteredInProgressTasks.length === 0 && filteredPendingTasks.length === 0 && (
+      {mobileTab === "active" && !scheduleViewActive && (
+        bucketViewActive
+          ? filteredInProgressTasks.length === 0 && filteredPendingTasks.length === 0
+          : flatActiveTasks.length === 0
+      ) && (
         <div className="empty-hint">Nothing here yet. Add something above.</div>
       )}
 

@@ -1038,6 +1038,73 @@ button { cursor: pointer; }
   border-color: var(--accent);
 }
 
+/* ── List view controls (category pills + bucket toggle) ──────────────────── */
+.list-view-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 8px;
+}
+
+.category-filter-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.category-pill {
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: 120ms ease;
+}
+
+.category-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.category-pill:hover:not(.active) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.bucket-toggle-btn {
+  font-size: 0.9rem;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-family: inherit;
+  transition: 120ms ease;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.bucket-toggle-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.bucket-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ── Horizon pills on task cards ──────────────────────────────────────────── */
 .horizon-pill {
   display: inline-block;
@@ -1074,7 +1141,6 @@ button { cursor: pointer; }
   cursor: pointer;
   padding: 0;
   font-family: inherit;
-  opacity: 0.6;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
