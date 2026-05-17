@@ -200,11 +200,11 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
           {
             role: "system",
             content:
-              `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only. Produce a concise first-pass output with sections for Goal, Next steps, and Blockers if any. Ask at most one follow-up question if needed.`,
+              `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only. Produce a concise first-pass output with sections for Goal, Next steps, and Blockers if any. Ask at most one follow-up question if needed.\n\nAlways include these two fields:\n- "canHelp": array of 1-2 short strings describing what you can do next for the user (e.g. "Research oral surgeons near you", "Draft a script for calling your insurance")\n- "cantHelp": array of 1-2 short strings describing what is out of scope (e.g. "Book appointments", "Access your calendar or contacts")\n\nKeep each item under 8 words.`,
           },
           {
             role: "user",
-            content: `Start this task.\nTitle: ${task.title}\nCategory: ${task.category}\nComplexity: ${task.complexity}\nContext: ${task.context}\nReturn JSON with keys: output, followUpQuestions.\nfollowUpQuestions must be an array of strings with length 0 or 1.`,
+            content: `Start this task.\nTitle: ${task.title}\nCategory: ${task.category}\nComplexity: ${task.complexity}\nContext: ${task.context}\nReturn JSON with keys: output, followUpQuestions, canHelp, cantHelp.\nfollowUpQuestions must be an array of strings with length 0 or 1.\ncanHelp and cantHelp must each be arrays of 1-2 short strings.`,
           },
         ],
       });
@@ -212,6 +212,12 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
       const parsed = extractJson(response.output_text);
       const followUpQuestions = Array.isArray(parsed.followUpQuestions)
         ? parsed.followUpQuestions.filter((item): item is string => typeof item === "string").slice(0, 1)
+        : [];
+      const canHelp = Array.isArray(parsed.canHelp)
+        ? parsed.canHelp.filter((item): item is string => typeof item === "string").slice(0, 2)
+        : [];
+      const cantHelp = Array.isArray(parsed.cantHelp)
+        ? parsed.cantHelp.filter((item): item is string => typeof item === "string").slice(0, 2)
         : [];
       const now = new Date().toISOString();
 
@@ -224,6 +230,8 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
           agent: "claude-api",
           status: followUpQuestions.length > 0 ? "waiting-on-user" : "completed",
           followUpQuestions,
+          canHelp,
+          cantHelp,
           output:
             typeof parsed.output === "string" && parsed.output.trim()
               ? parsed.output.trim()
@@ -239,13 +247,13 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
+      max_tokens: 600,
       temperature: 0.4,
-      system: `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only. Produce a concise first-pass output with sections for Goal, Next steps, and Blockers if any. Ask at most one follow-up question if needed. ${getWorkflowGuidance(task)}`,
+      system: `${personalOpsSystemContext} You are a personal ops task agent. Return JSON only. Produce a concise first-pass output with sections for Goal, Next steps, and Blockers if any. Ask at most one follow-up question if needed. ${getWorkflowGuidance(task)}\n\nAlways include these two fields:\n- "canHelp": array of 1-2 short strings describing what you can do next for the user (e.g. "Research oral surgeons near you", "Draft a script for calling your insurance")\n- "cantHelp": array of 1-2 short strings describing what is out of scope (e.g. "Book appointments", "Access your calendar or contacts")\n\nKeep each item under 8 words.`,
       messages: [
         {
           role: "user",
-          content: `Start this task.\nTitle: ${task.title}\nCategory: ${task.category}\nComplexity: ${task.complexity}\nContext: ${task.context}\nReturn JSON with keys: output, followUpQuestions.\nfollowUpQuestions must be an array of strings with length 0 or 1.`,
+          content: `Start this task.\nTitle: ${task.title}\nCategory: ${task.category}\nComplexity: ${task.complexity}\nContext: ${task.context}\nReturn JSON with keys: output, followUpQuestions, canHelp, cantHelp.\nfollowUpQuestions must be an array of strings with length 0 or 1.\ncanHelp and cantHelp must each be arrays of 1-2 short strings.`,
         },
       ],
     });
@@ -258,6 +266,12 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
     const followUpQuestions = Array.isArray(parsed.followUpQuestions)
       ? parsed.followUpQuestions.filter((item): item is string => typeof item === "string").slice(0, 1)
       : [];
+    const canHelp = Array.isArray(parsed.canHelp)
+      ? parsed.canHelp.filter((item): item is string => typeof item === "string").slice(0, 2)
+      : [];
+    const cantHelp = Array.isArray(parsed.cantHelp)
+      ? parsed.cantHelp.filter((item): item is string => typeof item === "string").slice(0, 2)
+      : [];
     const now = new Date().toISOString();
     const job: AgentJob = {
       id: uid("job"),
@@ -266,6 +280,8 @@ export async function startAgentJob(task: TaskCard): Promise<AgentJobResult> {
       agent: "claude-api",
       status: followUpQuestions.length > 0 ? "waiting-on-user" : "completed",
       followUpQuestions,
+      canHelp,
+      cantHelp,
       output:
         typeof parsed.output === "string" && parsed.output.trim()
           ? parsed.output.trim()
