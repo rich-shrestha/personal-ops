@@ -798,6 +798,8 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
   const [rankTopReason, setRankTopReason] = useState<{ bucketKey: TaskBucketKey; reason: string } | null>(null);
   const [horizonFilter, setHorizonFilter] = useState<"all" | TaskHorizon>("all");
   const [scheduleViewActive, setScheduleViewActive] = useState(false);
+  const [bucketViewActive, setBucketViewActive] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<"all" | TaskCategory>("all");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -1017,6 +1019,18 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
     [archivedTasks, areaToggle],
   );
   const pendingBuckets = useMemo(() => buildTaskBuckets(filteredPendingTasks), [filteredPendingTasks]);
+  const flatListTasks = useMemo(() => {
+    const base =
+      categoryFilter === "all"
+        ? filteredPendingTasks
+        : filteredPendingTasks.filter((t) => t.category === categoryFilter);
+    return [...base].sort((a, b) => {
+      if (a.sortOrder !== undefined && b.sortOrder !== undefined) return a.sortOrder - b.sortOrder;
+      if (a.sortOrder !== undefined) return -1;
+      if (b.sortOrder !== undefined) return 1;
+      return a.id.localeCompare(b.id);
+    });
+  }, [filteredPendingTasks, categoryFilter]);
   const unprocessedCaptures = useMemo(() => {
     const processedCaptureIds = new Set(tasks.map((task) => task.sourceCaptureId));
     return captures
@@ -1919,8 +1933,81 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         />
       )}
 
+      {/* List / Buckets view toggle */}
+      {mobileTab === "active" && !scheduleViewActive && (
+        <div className="schedule-mode-toggle">
+          <button
+            className={`schedule-mode-btn${!bucketViewActive ? " active" : ""}`}
+            onClick={() => setBucketViewActive(false)}
+          >
+            List
+          </button>
+          <button
+            className={`schedule-mode-btn${bucketViewActive ? " active" : ""}`}
+            onClick={() => setBucketViewActive(true)}
+          >
+            Buckets
+          </button>
+        </div>
+      )}
+
+      {/* Category filter pills — flat list only */}
+      {mobileTab === "active" && !scheduleViewActive && !bucketViewActive && (
+        <div className="horizon-toggle">
+          {(["all", "finance", "health", "career", "admin", "splitcheck", "other"] as const).map((cat) => (
+            <button
+              key={cat}
+              className={`horizon-btn${categoryFilter === cat ? " active" : ""}`}
+              onClick={() => setCategoryFilter(cat)}
+            >
+              {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Flat task list */}
+      {mobileTab === "active" && !scheduleViewActive && !bucketViewActive && flatListTasks.length > 0 && (
+        <section className="task-section">
+          <div className="section-header">
+            <span>Tasks</span>
+            <span className="count-badge">{flatListTasks.length}</span>
+          </div>
+          <div className="task-list">
+            {flatListTasks.map((task) => {
+              const job = jobs.find((j) => j.taskCardId === task.id);
+              const workflow = workflows.find((item) => item.taskCardId === task.id);
+              return (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  job={job}
+                  workflow={workflow}
+                  isExpanded={expandedTaskId === task.id}
+                  isRunning={jobBusyId === task.id}
+                  onToggle={() => toggleTask(task.id)}
+                  onStart={() => confirmAndStart(task)}
+                  onDone={() => completeTask(task.id)}
+                  onArchive={() => archiveTask(task.id)}
+                  onRestore={() => restoreTask(task.id)}
+                  onDelete={() => deleteTask(task.id)}
+                  onUpdate={(patch) => updateTask(task.id, patch)}
+                  onToggleWorkflowItem={toggleWorkflowItem}
+                  onUpdateTaxWorkflow={updateTaxWorkflow}
+                  onStartTaxSession={startTaxSession}
+                  onAdvanceTaxSession={advanceTaxSession}
+                  onResetTaxSession={resetTaxFilingSession}
+                  onPrepareBrowserHandoff={prepareBrowserHandoff}
+                  onRequestBrowserExecution={requestBrowserExecution}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Organized backlog */}
-      {mobileTab === "active" && !scheduleViewActive && pendingBuckets.length > 0 && (
+      {mobileTab === "active" && !scheduleViewActive && bucketViewActive && pendingBuckets.length > 0 && (
         <section className="task-section">
           <div className="section-header">
             <span>Organized Backlog</span>
