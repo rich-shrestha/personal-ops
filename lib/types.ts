@@ -51,6 +51,8 @@ export interface AgentJob {
   status: JobStatus;
   followUpQuestions: string[];
   output: string;
+  canHelp?: string[];
+  cantHelp?: string[];
   startedAt?: string;
   completedAt?: string;
 }
