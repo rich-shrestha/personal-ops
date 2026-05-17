@@ -799,7 +799,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
   const [horizonFilter, setHorizonFilter] = useState<"all" | TaskHorizon>("all");
   const [scheduleViewActive, setScheduleViewActive] = useState(false);
   const [bucketViewActive, setBucketViewActive] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState<"all" | "finance" | "career" | "health" | "admin" | "other">("all");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | TaskCategory>("all");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -1025,11 +1025,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         .filter((t) => !isArchived(t) && t.status !== "done")
         .filter((t) => areaToggle === "all" || t.area === areaToggle)
         .filter((t) => horizonFilter === "all" || t.horizon === horizonFilter)
-        .filter((t) => {
-          if (categoryFilter === "all") return true;
-          if (categoryFilter === "other") return t.category === "other" || t.category === "splitcheck";
-          return t.category === categoryFilter;
-        })
+        .filter((t) => categoryFilter === "all" || t.category === categoryFilter)
         .sort((a, b) => {
           if (a.sortOrder === undefined && b.sortOrder === undefined) return 0;
           if (a.sortOrder === undefined) return 1;
@@ -1855,29 +1851,36 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
         </section>
       )}
 
-      {/* View controls — category filter pills + bucket toggle */}
+      {/* List / Buckets view toggle */}
       {mobileTab === "active" && !scheduleViewActive && (
-        <div className="list-view-controls">
-          {!bucketViewActive && (
-            <div className="category-filter-pills">
-              {(["all", "finance", "career", "health", "admin", "other"] as const).map((cat) => (
-                <button
-                  key={cat}
-                  className={`category-pill${categoryFilter === cat ? " active" : ""}`}
-                  onClick={() => setCategoryFilter(cat)}
-                >
-                  {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="schedule-mode-toggle">
           <button
-            className={`bucket-toggle-btn${bucketViewActive ? " active" : ""}`}
-            onClick={() => setBucketViewActive((v) => !v)}
-            title={bucketViewActive ? "Switch to flat list" : "Switch to grouped view"}
+            className={`schedule-mode-btn${!bucketViewActive ? " active" : ""}`}
+            onClick={() => setBucketViewActive(false)}
           >
-            ☰
+            List
           </button>
+          <button
+            className={`schedule-mode-btn${bucketViewActive ? " active" : ""}`}
+            onClick={() => setBucketViewActive(true)}
+          >
+            Buckets
+          </button>
+        </div>
+      )}
+
+      {/* Category filter pills — flat list only */}
+      {mobileTab === "active" && !scheduleViewActive && !bucketViewActive && (
+        <div className="horizon-toggle">
+          {(["all", "finance", "career", "health", "admin", "splitcheck", "other"] as const).map((cat) => (
+            <button
+              key={cat}
+              className={`horizon-btn${categoryFilter === cat ? " active" : ""}`}
+              onClick={() => setCategoryFilter(cat)}
+            >
+              {cat === "all" ? "All" : cat === "splitcheck" ? "SplitCheck" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+            </button>
+          ))}
         </div>
       )}
 
@@ -1970,6 +1973,10 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
       {/* Flat list — default view */}
       {mobileTab === "active" && !bucketViewActive && !scheduleViewActive && flatActiveTasks.length > 0 && (
         <section className="task-section">
+          <div className="section-header">
+            <span>Tasks</span>
+            <span className="count-badge">{flatActiveTasks.length}</span>
+          </div>
           <div className="task-list">
             {flatActiveTasks.map((task) => {
               const job = jobs.find((j) => j.taskCardId === task.id);
