@@ -6,6 +6,7 @@
   --muted: #6b6b6b;
   --accent: #0d6c63;
   --accent-strong: #0a4d47;
+  --teal: #0d9488;
   --warning: #c05c1a;
   --done: #2f7d43;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -588,6 +589,18 @@ button { cursor: pointer; }
   gap: 8px;
 }
 
+.in-progress-section {
+  border-left: 3px solid var(--teal);
+  background: color-mix(in srgb, var(--teal) 6%, var(--surface));
+  border-radius: var(--radius);
+  padding: 8px 12px;
+}
+
+.in-progress-section .section-header span:first-child {
+  color: var(--teal);
+  font-weight: 600;
+}
+
 .bucket-stack {
   display: grid;
   gap: 10px;
@@ -884,6 +897,81 @@ button { cursor: pointer; }
   font-size: 0.9rem;
   color: var(--warning);
   line-height: 1.5;
+}
+
+/* ─── Agent capabilities block ──────────────────────────────────────────── */
+
+.agent-capabilities {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.agent-can,
+.agent-cant {
+  display: grid;
+  gap: 3px;
+}
+
+.cap-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cap-list {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 2px;
+}
+
+.cap-list li {
+  font-size: 0.87rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+/* ─── Inline reply ──────────────────────────────────────────────────────── */
+
+.agent-reply-wrap {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.agent-reply-input {
+  width: 100%;
+  background: var(--bg, #fff);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  color: var(--text);
+  resize: none;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.agent-reply-input:focus {
+  outline: none;
+  border-color: var(--teal);
+}
+
+.agent-reply-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.reply-sent-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 /* ─── Ideas ──────────────────────────────────────────────────────────────── */

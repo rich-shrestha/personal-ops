@@ -258,6 +258,7 @@ function TaskItem({
   onPrepareBrowserHandoff,
   onRequestBrowserExecution,
   onReopen,
+  onReply,
 }: {
   task: TaskCard;
   job?: AgentJob;
@@ -274,6 +275,7 @@ function TaskItem({
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onReopen?: () => void;
+  onReply?: (answer: string) => void;
   onToggleWorkflowItem: (workflowId: string, itemId: string) => void;
   onUpdateTaxWorkflow: (
     workflowId: string,
@@ -297,6 +299,8 @@ function TaskItem({
 
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [noteDraft, setNoteDraft] = useState(task.notes ?? "");
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replySent, setReplySent] = useState(false);
   // Sync draft when task.notes changes externally (initial load)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setNoteDraft(task.notes ?? ""); }, [task.id]);
@@ -496,9 +500,7 @@ function TaskItem({
           {job && (
             <div className="job-output">
               <div className="field-label">
-                {job.status === "completed" ? "Result" :
-                 job.status === "waiting-on-user" ? "Agent needs your input" :
-                 "Agent working..."}
+                {job.status === "waiting-on-user" ? "Agent needs your input" : "Result"}
               </div>
               <p className="output-text">{job.output}</p>
               {job.followUpQuestions.length > 0 && (
@@ -506,6 +508,59 @@ function TaskItem({
                   {job.followUpQuestions.map((q) => (
                     <p className="followup-q" key={q}>{q}</p>
                   ))}
+                </div>
+              )}
+              {((job.canHelp && job.canHelp.length > 0) || (job.cantHelp && job.cantHelp.length > 0)) && (
+                <div className="agent-capabilities">
+                  {job.canHelp && job.canHelp.length > 0 && (
+                    <div className="agent-can">
+                      <span className="cap-label">✅ I can help with:</span>
+                      <ul className="cap-list">
+                        {job.canHelp.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {job.cantHelp && job.cantHelp.length > 0 && (
+                    <div className="agent-cant">
+                      <span className="cap-label">❌ I can&apos;t:</span>
+                      <ul className="cap-list">
+                        {job.cantHelp.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+              {onReply && (
+                <div className="agent-reply-wrap">
+                  <textarea
+                    className="agent-reply-input"
+                    rows={2}
+                    placeholder="Reply to continue…"
+                    value={replyDraft}
+                    onChange={(e) => setReplyDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && replyDraft.trim()) {
+                        onReply(replyDraft.trim());
+                        setReplyDraft("");
+                        setReplySent(true);
+                      }
+                    }}
+                  />
+                  <div className="agent-reply-row">
+                    {replySent && <span className="reply-sent-hint">Sent — waiting for response…</span>}
+                    <button
+                      className="button sm"
+                      disabled={!replyDraft.trim()}
+                      onClick={() => {
+                        if (!replyDraft.trim()) return;
+                        onReply(replyDraft.trim());
+                        setReplyDraft("");
+                        setReplySent(true);
+                      }}
+                    >
+                      Send
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1019,10 +1074,21 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
     [archivedTasks, areaToggle],
   );
   const pendingBuckets = useMemo(() => buildTaskBuckets(filteredPendingTasks), [filteredPendingTasks]);
+  const flatInProgressTasks = useMemo(
+    () =>
+      [...tasks]
+        .filter((t) => !isArchived(t) && t.status === "in-progress")
+        .filter((t) => areaToggle === "all" || t.area === areaToggle)
+        .filter((t) => horizonFilter === "all" || t.horizon === horizonFilter)
+        .filter((t) => categoryFilter === "all" || t.category === categoryFilter)
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, areaToggle, horizonFilter, categoryFilter],
+  );
   const flatActiveTasks = useMemo(
     () =>
       [...tasks]
-        .filter((t) => !isArchived(t) && t.status !== "done")
+        .filter((t) => !isArchived(t) && t.status !== "done" && t.status !== "in-progress")
         .filter((t) => areaToggle === "all" || t.area === areaToggle)
         .filter((t) => horizonFilter === "all" || t.horizon === horizonFilter)
         .filter((t) => categoryFilter === "all" || t.category === categoryFilter)
@@ -1397,6 +1463,47 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
           );
           updateTask(relatedJob.taskCardId, { status: "in-progress" });
           setFollowUpAnswer("");
+          setApiProvider("heuristic");
+        })
+        .finally(() => {
+          setJobBusyId(null);
+        });
+    });
+  }
+
+  function inlineReply(taskId: string, answer: string) {
+    const relatedJob = jobs.find((j) => j.taskCardId === taskId);
+    if (!relatedJob || !answer.trim()) return;
+
+    setJobBusyId(taskId);
+    startTransition(() => {
+      void fetch("/api/agent-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "continue", job: relatedJob, answer }),
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Agent continue failed");
+          const result = (await response.json()) as AgentJobResult;
+          setJobs((current) => current.map((job) => (job.id === relatedJob.id ? result.job : job)));
+          updateTask(taskId, { status: "in-progress" });
+          setApiProvider(result.provider);
+        })
+        .catch(() => {
+          setJobs((current) =>
+            current.map((job) =>
+              job.id === relatedJob.id
+                ? {
+                    ...job,
+                    status: "completed" as const,
+                    followUpQuestions: [],
+                    output: `${job.output} Follow-up received: ${answer.trim()}. Agent finished the next pass.`,
+                    completedAt: new Date().toISOString(),
+                  }
+                : job,
+            ),
+          );
+          updateTask(taskId, { status: "in-progress" });
           setApiProvider("heuristic");
         })
         .finally(() => {
@@ -1884,9 +1991,9 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
 
       {/* In Progress — agent working, output visible */}
       {mobileTab === "active" && !scheduleViewActive && bucketViewActive && filteredInProgressTasks.length > 0 && (
-        <section className="task-section">
+        <section className="task-section in-progress-section">
           <div className="section-header">
-            <span>In Progress</span>
+            <span>In Progress — awaiting your input</span>
             <span className="count-badge">{filteredInProgressTasks.length}</span>
           </div>
           <div className="task-list">
@@ -1899,7 +2006,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
                   task={task}
                   job={job}
                   workflow={workflow}
-                  isExpanded={expandedTaskId === task.id}
+                  isExpanded={expandedTaskId === task.id || Boolean(job?.output)}
                   isRunning={jobBusyId === task.id}
                   onToggle={() => toggleTask(task.id)}
                   onStart={() => confirmAndStart(task)}
@@ -1915,6 +2022,8 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
                   onResetTaxSession={resetTaxFilingSession}
                   onPrepareBrowserHandoff={prepareBrowserHandoff}
                   onRequestBrowserExecution={requestBrowserExecution}
+                  onReopen={() => reopenTask(task.id)}
+                  onReply={(answer) => inlineReply(task.id, answer)}
                 />
               );
             })}
@@ -1966,6 +2075,48 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
           )}
           onUpdate={(taskId, patch) => updateTask(taskId, patch)}
         />
+      )}
+
+      {/* In Progress — pinned at top of flat list */}
+      {mobileTab === "active" && !bucketViewActive && !scheduleViewActive && flatInProgressTasks.length > 0 && (
+        <section className="task-section in-progress-section">
+          <div className="section-header">
+            <span>In Progress — awaiting your input</span>
+            <span className="count-badge">{flatInProgressTasks.length}</span>
+          </div>
+          <div className="task-list">
+            {flatInProgressTasks.map((task) => {
+              const job = jobs.find((j) => j.taskCardId === task.id);
+              const workflow = workflows.find((item) => item.taskCardId === task.id);
+              return (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  job={job}
+                  workflow={workflow}
+                  isExpanded={expandedTaskId === task.id || Boolean(job?.output)}
+                  isRunning={jobBusyId === task.id}
+                  onToggle={() => toggleTask(task.id)}
+                  onStart={() => confirmAndStart(task)}
+                  onDone={() => completeTask(task.id)}
+                  onArchive={() => archiveTask(task.id)}
+                  onRestore={() => restoreTask(task.id)}
+                  onDelete={() => deleteTask(task.id)}
+                  onUpdate={(patch) => updateTask(task.id, patch)}
+                  onToggleWorkflowItem={toggleWorkflowItem}
+                  onUpdateTaxWorkflow={updateTaxWorkflow}
+                  onStartTaxSession={startTaxSession}
+                  onAdvanceTaxSession={advanceTaxSession}
+                  onResetTaxSession={resetTaxFilingSession}
+                  onPrepareBrowserHandoff={prepareBrowserHandoff}
+                  onRequestBrowserExecution={requestBrowserExecution}
+                  onReopen={() => reopenTask(task.id)}
+                  onReply={(answer) => inlineReply(task.id, answer)}
+                />
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* Flat list — default view */}
@@ -2079,7 +2230,7 @@ export function PersonalOpsApp({ userEmail }: PersonalOpsAppProps) {
       {mobileTab === "active" && !scheduleViewActive && (
         bucketViewActive
           ? filteredInProgressTasks.length === 0 && filteredPendingTasks.length === 0
-          : flatActiveTasks.length === 0
+          : flatActiveTasks.length === 0 && flatInProgressTasks.length === 0
       ) && (
         <div className="empty-hint">Nothing here yet. Add something above.</div>
       )}
